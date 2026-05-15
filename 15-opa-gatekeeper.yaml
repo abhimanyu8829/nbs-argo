@@ -39,25 +39,25 @@ spec:
         package requireresourcelimits
 
         violation[{"msg": msg}] {
-          container := input.review.object.spec.containers[_]
+          container := input.review.object.spec.template.spec.containers[_]
           not container.resources.limits.cpu
           msg := sprintf("Container '%v' must have a CPU limit set", [container.name])
         }
 
         violation[{"msg": msg}] {
-          container := input.review.object.spec.containers[_]
+          container := input.review.object.spec.template.spec.containers[_]
           not container.resources.limits.memory
           msg := sprintf("Container '%v' must have a memory limit set", [container.name])
         }
 
         violation[{"msg": msg}] {
-          container := input.review.object.spec.containers[_]
+          container := input.review.object.spec.template.spec.containers[_]
           not container.resources.requests.cpu
           msg := sprintf("Container '%v' must have a CPU request set", [container.name])
         }
 
         violation[{"msg": msg}] {
-          container := input.review.object.spec.containers[_]
+          container := input.review.object.spec.template.spec.containers[_]
           not container.resources.requests.memory
           msg := sprintf("Container '%v' must have a memory request set", [container.name])
         }
@@ -76,10 +76,12 @@ spec:
         kinds: ["Deployment", "StatefulSet"]
     namespaces:
       - auth-namespace
-      - users-namespace
-      - orders-namespace
-      - products-namespace
-      - notify-namespace
+      - cockpit-namespace
+      - messenger-namespace
+      - social-namespace
+      - task-namespace
+      - vault-namespace
+      - workflow-namespace
       - database-namespace
 
 ---
@@ -128,10 +130,12 @@ spec:
         kinds: ["Deployment"]
     namespaces:
       - auth-namespace
-      - users-namespace
-      - orders-namespace
-      - products-namespace
-      - notify-namespace
+      - cockpit-namespace
+      - messenger-namespace
+      - social-namespace
+      - task-namespace
+      - vault-namespace
+      - workflow-namespace
   parameters:
     labels:
       - "app"
@@ -156,7 +160,7 @@ spec:
         package blockprivilegedcontainers
 
         violation[{"msg": msg}] {
-          container := input.review.object.spec.containers[_]
+          container := input.review.object.spec.template.spec.containers[_]
           container.securityContext.privileged == true
           msg := sprintf("Container '%v' must not run as privileged", [container.name])
         }
@@ -175,10 +179,12 @@ spec:
         kinds: ["Deployment", "StatefulSet", "DaemonSet"]
     namespaces:
       - auth-namespace
-      - users-namespace
-      - orders-namespace
-      - products-namespace
-      - notify-namespace
+      - cockpit-namespace
+      - messenger-namespace
+      - social-namespace
+      - task-namespace
+      - vault-namespace
+      - workflow-namespace
       - database-namespace
       - traefik-ingress
 
@@ -201,7 +207,7 @@ spec:
         package blockrootcontainers
 
         violation[{"msg": msg}] {
-          not input.review.object.spec.securityContext.runAsNonRoot == true
+          not input.review.object.spec.template.spec.securityContext.runAsNonRoot == true
           msg := "Pod must set securityContext.runAsNonRoot: true"
         }
 ---
@@ -219,10 +225,12 @@ spec:
         kinds: ["Deployment", "StatefulSet"]
     namespaces:
       - auth-namespace
-      - users-namespace
-      - orders-namespace
-      - products-namespace
-      - notify-namespace
+      - cockpit-namespace
+      - messenger-namespace
+      - social-namespace
+      - task-namespace
+      - vault-namespace
+      - workflow-namespace
 
 ---
 # ── 5. RequireReadOnlyRootFS ──────────────────────────────────
@@ -243,7 +251,7 @@ spec:
         package requirereadonlyrootfs
 
         violation[{"msg": msg}] {
-          container := input.review.object.spec.containers[_]
+          container := input.review.object.spec.template.spec.containers[_]
           not container.securityContext.readOnlyRootFilesystem == true
           msg := sprintf("Container '%v' must set readOnlyRootFilesystem: true", [container.name])
         }
@@ -262,10 +270,12 @@ spec:
         kinds: ["Deployment"]
     namespaces:
       - auth-namespace
-      - users-namespace
-      - orders-namespace
-      - products-namespace
-      - notify-namespace
+      - cockpit-namespace
+      - messenger-namespace
+      - social-namespace
+      - task-namespace
+      - vault-namespace
+      - workflow-namespace
 
 ---
 # ── 6. BlockLatestTag ─────────────────────────────────────────
@@ -283,16 +293,16 @@ spec:
   targets:
     - target: admission.k8s.gatekeeper.sh
       rego: |
-        package blocklatestag
+        package blocklatesttag
 
         violation[{"msg": msg}] {
-          container := input.review.object.spec.containers[_]
+          container := input.review.object.spec.template.spec.containers[_]
           endswith(container.image, ":latest")
           msg := sprintf("Container '%v' must not use ':latest' tag. Pin to a specific version.", [container.name])
         }
 
         violation[{"msg": msg}] {
-          container := input.review.object.spec.containers[_]
+          container := input.review.object.spec.template.spec.containers[_]
           not contains(container.image, ":")
           msg := sprintf("Container '%v' has no image tag. Pin to a specific version.", [container.name])
         }
@@ -311,8 +321,10 @@ spec:
         kinds: ["Deployment", "StatefulSet"]
     namespaces:
       - auth-namespace
-      - users-namespace
-      - orders-namespace
-      - products-namespace
-      - notify-namespace
+      - cockpit-namespace
+      - messenger-namespace
+      - social-namespace
+      - task-namespace
+      - vault-namespace
+      - workflow-namespace
       - database-namespace

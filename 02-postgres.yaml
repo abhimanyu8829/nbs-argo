@@ -1,13 +1,4 @@
 apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-secret
-  namespace: database-namespace
-type: Opaque
-stringData:
-  postgres-password: "nitroberry-secret-password"
----
-apiVersion: v1
 kind: ConfigMap
 metadata:
   name: postgres-init-script
@@ -29,7 +20,7 @@ metadata:
   namespace: database-namespace
 spec:
   serviceName: "postgres-service"
-  replicas: 2
+  replicas: 1
   selector:
     matchLabels:
       app: postgres
@@ -41,6 +32,13 @@ spec:
       containers:
       - name: postgres
         image: postgres:15-alpine
+        resources:
+          requests:
+            cpu: "250m"
+            memory: "512Mi"
+          limits:
+            cpu: "1000m"
+            memory: "1Gi"
         ports:
         - containerPort: 5432
           name: postgres
@@ -48,7 +46,7 @@ spec:
         - name: POSTGRES_PASSWORD
           valueFrom:
             secretKeyRef:
-              name: postgres-secret
+              name: postgres-credentials
               key: postgres-password
         volumeMounts:
         - name: postgres-storage
@@ -95,27 +93,12 @@ spec:
   - Ingress
   ingress:
   - from:
-    - namespaceSelector:
+    - podSelector:
         matchLabels:
-          kubernetes.io/metadata.name: auth-namespace
-    - namespaceSelector:
+          app: pgbouncer
+    - podSelector:
         matchLabels:
-          kubernetes.io/metadata.name: cockpit-namespace
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: messenger-namespace
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: social-namespace
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: task-namespace
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: vault-namespace
-    - namespaceSelector:
-        matchLabels:
-          kubernetes.io/metadata.name: workflow-namespace
+          app: postgres-backup
     ports:
     - protocol: TCP
       port: 5432

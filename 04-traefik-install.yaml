@@ -33,7 +33,7 @@ spec:
           image: traefik:v3.0
           args:
             - --api.dashboard=true
-            - --api.insecure=true
+            - --api.insecure=false
             - --accesslog
             - --entrypoints.web.address=:80
             - --entrypoints.websecure.address=:443
@@ -78,7 +78,3 @@ spec:
       port: 443
       name: websecure
       targetPort: 443
-    - protocol: TCP
-      port: 8080
-      name: dashboard
-      targetPort: 8080

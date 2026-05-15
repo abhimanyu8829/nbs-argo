@@ -5,6 +5,7 @@ metadata:
   namespace: messenger-namespace
   labels:
     app: messenger-api
+    managed-by: nitroberry
 spec:
   replicas: 2
   selector:
@@ -14,21 +15,66 @@ spec:
     metadata:
       labels:
         app: messenger-api
+        managed-by: nitroberry
     spec:
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: messenger-api
+              topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: messenger-api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
       containers:
-      - name: api
-        image: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/messenger-api:latest
-        ports:
-        - containerPort: 8080
-        envFrom:
-        - configMapRef:
-            name: messenger-api-config
-        env:
-        - name: DATABASE_URL
-          valueFrom:
-            secretKeyRef:
-              name: messenger-api-secrets
-              key: database-url
+        - name: api
+          image: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/messenger-api:REPLACE_WITH_IMAGE_TAG
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: messenger-api-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: messenger-api-secrets
+                  key: database-url
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
 ---
 apiVersion: v1
 kind: Service
@@ -110,6 +156,9 @@ spec:
     - namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: database-namespace
+      podSelector:
+        matchLabels:
+          app: pgbouncer
     ports:
     - protocol: TCP
-      port: 5432
+      port: 6432

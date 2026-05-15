@@ -15,6 +15,7 @@ spec:
     metadata:
       labels:
         app: workflow-api
+        managed-by: nitroberry
     spec:
       affinity:
         podAntiAffinity:
@@ -36,7 +37,7 @@ spec:
         fsGroup: 1000
       containers:
         - name: api
-          image: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/workflow-api:latest
+          image: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/workflow-api:REPLACE_WITH_IMAGE_TAG
           ports:
             - containerPort: 8080
           envFrom:
@@ -75,7 +76,7 @@ spec:
             capabilities:
               drop: ["ALL"]
         - name: worker
-          image: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/workflow-worker:latest
+          image: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/workflow-worker:REPLACE_WITH_IMAGE_TAG
           envFrom:
             - configMapRef:
                 name: workflow-api-config
@@ -190,6 +191,9 @@ spec:
     - namespaceSelector:
         matchLabels:
           kubernetes.io/metadata.name: database-namespace
+      podSelector:
+        matchLabels:
+          app: pgbouncer
     ports:
     - protocol: TCP
-      port: 5432
+      port: 6432

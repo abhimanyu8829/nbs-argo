@@ -7,7 +7,7 @@
 ![Traefik](https://img.shields.io/badge/traefik-%2324A1C1.svg?style=for-the-badge&logo=traefikproxy&logoColor=white)
 ![AWS ECR](https://img.shields.io/badge/AWS_ECR-%23FF9900.svg?style=for-the-badge&logo=amazon-aws&logoColor=white)
 
-A **production-grade**, **bare-metal Kubernetes architecture** for microservices with **Traefik v3** ingress, **MetalLB** load balancing, **PostgreSQL 15** multi-schema database, **OPA Gatekeeper** policy enforcement, and **automated S3 backups**.
+A **production-grade**, **bare-metal Kubernetes architecture** for microservices with **Traefik v3** ingress, **MetalLB** load balancing, **PostgreSQL 15** multi-schema database, **PgBouncer** connection pooling, **OPA Gatekeeper** policy enforcement, and **automated S3 backups**.
 
 [Features](#-features) • [Architecture](#-architecture) • [ECR Registry](#-amazon-ecr-repositories) • [Quick Start](#-quick-start-local-development) • [Production Deployment](#-production-deployment) • [Update Guide](#-production-update-guide)
 
@@ -47,6 +47,7 @@ A **production-grade**, **bare-metal Kubernetes architecture** for microservices
 
 ### Data Layer
 - ✅ **PostgreSQL 15** StatefulSet with stable network identity.
+- ✅ **PgBouncer connection pooling** — APIs connect to `pgbouncer-service:6432`; PgBouncer reuses backend Postgres connections on `postgres-service:5432`.
 - ✅ **Multi-schema isolation** — Each service owns its schema (e.g., `auth`, `task`, `social`).
 - ✅ **Nightly S3 backups** — Automated `pg_dumpall` synced to AWS S3.
 
@@ -93,8 +94,13 @@ A **production-grade**, **bare-metal Kubernetes architecture** for microservices
                     ┌──────────────────┐
                     │  database-ns     │
                     │  ┌────────────┐  │
+                    │  │ PgBouncer  │  │
+                    │  │   :6432    │  │
+                    │  └─────┬──────┘  │
+                    │        │         │
+                    │  ┌─────▼──────┐  │
                     │  │ PostgreSQL │  │
-                    │  │ (Schemas)  │  │
+                    │  │   :5432    │  │
                     │  └────────────┘  │
                     └──────────────────┘
                               │
@@ -126,6 +132,7 @@ kubernetes_nitroberry/
 ├── 00-namespaces.yaml              # Global namespace definitions
 ├── 01-metallb.yaml                 # MetalLB IP Pool config
 ├── 02-postgres.yaml                # PostgreSQL StatefulSet
+├── 03-pgbouncer.yaml               # PgBouncer connection pooler
 ├── 03-traefik-rbac.yaml            # Ingress RBAC
 ├── 04-traefik-install.yaml         # Ingress Controller
 ├── 05-traefik-middlewares.yaml     # JWT, Rate-limit, Headers
@@ -183,7 +190,9 @@ Use this workflow to run the entire stack locally on **Minikube**.
 3.  **Apply Infrastructure**:
     ```bash
     kubectl apply -f 00-namespaces.yaml
+    kubectl apply -f 12-secrets.yaml
     kubectl apply -f 02-postgres.yaml
+    kubectl apply -f 03-pgbouncer.yaml
     kubectl apply -f 03-traefik-rbac.yaml
     kubectl apply -f 04-traefik-install.yaml
     kubectl apply -f 05-traefik-middlewares.yaml
@@ -191,7 +200,6 @@ Use this workflow to run the entire stack locally on **Minikube**.
 4.  **Apply Configs**:
     ```bash
     kubectl apply -f 11-configmaps.yaml
-    kubectl apply -f 12-secrets.yaml
     ```
 
 ---
@@ -205,8 +213,8 @@ Use this workflow to run the entire stack locally on **Minikube**.
 - [ ] ECR repositories created and images pushed.
 
 ### Deployment Steps
-1.  **Core Infra**: Apply namespaces, MetalLB, and Postgres (`00`, `01`, `02`).
-2.  **Traefik**: Apply RBAC, Installation, and Middlewares (`03`, `04`, `05`).
+1.  **Core Infra**: Apply namespaces, MetalLB, Secrets, Postgres, and PgBouncer (`00`, `01`, `12`, `02`, `03-pgbouncer`).
+2.  **Traefik**: Apply RBAC, Installation, and Middlewares (`03-traefik`, `04`, `05`).
 3.  **Services**: Apply all service manifests (`06` through `14`).
 4.  **Security**: Apply OPA policies (`15`).
 
@@ -226,14 +234,15 @@ Follow this checklist to ensure every value is correctly configured for your pro
 | **`12-secrets.yaml`** | `postgres-password` | Set a strong, unique password for the main database. |
 | | `db-password` | (Required for each service) Must match the `postgres-password`. |
 | | `jwt-secret` | Generate a random 256-bit string (e.g., using `openssl rand -base64 32`). |
-| | `database-url` | Update with the correct password: `postgres://postgres:PASSWORD@...` |
+| | `database-url` | Update with the correct password and keep host/port as `pgbouncer-service.database-namespace.svc.cluster.local:6432`. |
 | | `AWS_ACCESS_KEY_ID` | Your AWS access key for S3 backups. |
 | | `AWS_SECRET_ACCESS_KEY` | Your AWS secret key. |
 | | `S3_BUCKET` | The name of your existing S3 bucket for DB dumps. |
 | **`06` to `14` (APIs)** | `Host()` rule | Change `nitroberry.com` to your actual production domain. |
-| | `image` tag | Change `:latest` to a specific version tag (e.g., `:v1.0.5`). |
+| | `image` tag | Replace `:REPLACE_WITH_IMAGE_TAG` with a specific version tag (e.g., `:v1.0.5`). |
 | | `certResolver` | Ensure it matches the resolver defined in your Traefik setup (default: `myresolver`). |
 | **`11-configmaps.yaml`**| `LOG_LEVEL` | Set to `info` or `warn` for production (avoid `debug`). |
+| **`argocd-app.yaml`** | `repoURL` | Replace `REPLACE_WITH_GIT_REPO_URL` with the final Git repository URL ArgoCD should sync from. |
 
 ### 1. Update Network Settings (MetalLB)
 If your bare-metal server is on a different subnet, update `01-metallb.yaml`:
@@ -248,7 +257,8 @@ spec:
 1.  Generate a JWT Secret: `openssl rand -base64 32`
 2.  Generate a DB Password: `openssl rand -base64 24`
 3.  Replace all `REPLACE_WITH_...` strings in the file.
-4.  **Note**: Ensure `database-url` in each secret is updated with the new password.
+4.  **Note**: Ensure `database-url` in each secret is updated with the new password, but keep the PgBouncer host and port.
+5.  For GitOps/ArgoCD, do not commit real secret values. Commit encrypted SealedSecrets or ExternalSecret definitions and keep the real values in the cluster secret manager/AWS Secrets Manager.
 
 ### 3. Update Domain / Hosts
 Search and replace `nitroberry.com` with your real domain (e.g., `api.yourcompany.com`) in all files from `06-auth.yaml` to `14-workflow.yaml`.
@@ -259,10 +269,10 @@ Example in `06-auth.yaml`:
 ```
 
 ### 4. Deploying New Image Versions
-For production stability, never use `:latest`. Update the `image` field in your deployment files:
+For production stability, never use `:latest`. Replace the image tag placeholder before deployment:
 ```yaml
 # Before
-image: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/auth-api:latest
+image: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/auth-api:REPLACE_WITH_IMAGE_TAG
 
 # After (Production)
 image: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/auth-api:v1.0.5
@@ -275,7 +285,7 @@ kubectl apply -f 06-auth.yaml
 ---
 
 ## 🔒 Security Features
-- **Network Policies**: Services only communicate with the DB; no cross-service sniffing.
+- **Network Policies**: Services only communicate with PgBouncer; only PgBouncer and the backup job can reach Postgres directly.
 - **Non-Root Containers**: All apps run as non-root (UID 1000).
 - **OPA Gatekeeper**: Blocks any insecure deployment attempts automatically.
 
