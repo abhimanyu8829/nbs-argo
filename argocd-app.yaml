@@ -8,8 +8,8 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: REPLACE_WITH_GIT_REPO_URL
-    targetRevision: main
+    repoURL: https://github.com/dushyantajangid/NitroBerry-Platform.git
+    targetRevision: argocdTest
     path: ./
     directory:
       recurse: true
