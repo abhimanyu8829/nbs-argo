@@ -8,9 +8,9 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/dushyantajangid/NitroBerry-Platform.git
-    targetRevision: argocdTest
-    path: Helm/charts/auth-api-helm
+    repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
+    chart: auth-api-helm
+    targetRevision: 0.1.0
     helm:
       valueFiles:
         - values.yaml
@@ -43,9 +43,9 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/dushyantajangid/NitroBerry-Platform.git
-    targetRevision: argocdTest
-    path: Helm/charts/auth-worker-helm
+    repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
+    chart: auth-worker-helm
+    targetRevision: 0.1.0
     helm:
       valueFiles:
         - values.yaml
