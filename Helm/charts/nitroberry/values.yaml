@@ -1,6 +1,21 @@
 imagePullSecrets:
   - name: ecr-registry-secret
 
+imageTags:
+  authApi: &authApiTag "0.0.0.27"
+  authWorker: &authWorkerTag "0.0.0.20"
+  cockpitApi: &cockpitApiTag "local-test-1"
+  cockpitWorker: &cockpitWorkerTag "local-test-1"
+  messengerApi: &messengerApiTag "local-test-1"
+  socialApi: &socialApiTag "local-test-1"
+  socialWorker: &socialWorkerTag "0.0.0.15"
+  taskApi: &taskApiTag "0.0.0.16"
+  taskWorker: &taskWorkerTag "0.0.0.16"
+  vaultApi: &vaultApiTag "local-test-1"
+  vaultWorker: &vaultWorkerTag "0.0.0.13"
+  workflowApi: &workflowApiTag "local-test-1"
+  workflowWorker: &workflowWorkerTag "local-test-1"
+
 database:
   sslMode: disable
 
@@ -24,11 +39,6 @@ probes:
   readinessInitialDelaySeconds: 5
   livenessInitialDelaySeconds: 15
 
-# CI/CD image tag flow:
-# 1. GitHub Actions builds and pushes the service image to ECR.
-# 2. The workflow should generate a tag such as 0.0.0.<github.run_number>.
-# 3. The workflow should update the matching services.<name>.<api|worker>.tag value below.
-# 4. ArgoCD sees this values.yaml Git change and deploys the new image.
 services:
   auth:
     replicas: 2
@@ -38,10 +48,10 @@ services:
       maxReplicas: 10
     api:
       repository: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/auth-api
-      tag: 0.0.0.27
+      tag: *authApiTag
     worker:
       repository: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/auth-worker
-      tag: 0.0.0.20
+      tag: *authWorkerTag
   cockpit:
     replicas: 2
     strategyType: RollingUpdate
@@ -50,10 +60,10 @@ services:
       maxReplicas: 10
     api:
       repository: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/cockpit-api
-      tag: local-test-1
+      tag: *cockpitApiTag
     worker:
       repository: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/cockpit-worker
-      tag: local-test-1
+      tag: *cockpitWorkerTag
   messenger:
     replicas: 2
     strategyType: RollingUpdate
@@ -62,7 +72,7 @@ services:
       maxReplicas: 10
     api:
       repository: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/messenger-api
-      tag: local-test-1
+      tag: *messengerApiTag
   social:
     replicas: 2
     strategyType: RollingUpdate
@@ -71,10 +81,10 @@ services:
       maxReplicas: 10
     api:
       repository: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/social-api
-      tag: local-test-1
+      tag: *socialApiTag
     worker:
       repository: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/social-worker
-      tag: 0.0.0.15
+      tag: *socialWorkerTag
   task:
     replicas: 2
     strategyType: RollingUpdate
@@ -83,10 +93,10 @@ services:
       maxReplicas: 10
     api:
       repository: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/task-api
-      tag: 0.0.0.16
+      tag: *taskApiTag
     worker:
       repository: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/task-worker
-      tag: 0.0.0.16
+      tag: *taskWorkerTag
   vault:
     replicas: 2
     strategyType: RollingUpdate
@@ -95,10 +105,10 @@ services:
       maxReplicas: 10
     api:
       repository: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/vault-api
-      tag: local-test-1
+      tag: *vaultApiTag
     worker:
       repository: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/vault-worker
-      tag: 0.0.0.13
+      tag: *vaultWorkerTag
   workflow:
     replicas: 2
     strategyType: RollingUpdate
@@ -107,7 +117,7 @@ services:
       maxReplicas: 10
     api:
       repository: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/workflow-api
-      tag: local-test-1
+      tag: *workflowApiTag
     worker:
       repository: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/workflow-worker
-      tag: local-test-1
+      tag: *workflowWorkerTag
