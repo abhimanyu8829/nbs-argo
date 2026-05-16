@@ -78,7 +78,7 @@ try {
 }
 
 # Check we're in the right directory
-$files = @("00-namespaces.yaml","11-configmaps.yaml","12-secrets.yaml","13-api-deployments-prod.yaml")
+$files = @("Legacy yaml/00-namespaces.yaml","Legacy yaml/11-configmaps.yaml","Legacy yaml/12-secrets.yaml","Legacy yaml/13-api-deployments-prod.yaml")
 foreach ($f in $files) {
     if (-not (Test-Path $f)) {
         Print-Error "Missing file: $f — run this script from the kubernetes/ directory"
@@ -110,15 +110,15 @@ if (-not $imgCheck) {
 Print-Step "STEP 2 — Namespaces and base manifests"
 # =============================================================
 
-kubectl apply -f 00-namespaces.yaml
+kubectl apply -f "Legacy yaml/00-namespaces.yaml"
 Print-Ok "Namespaces applied"
 
-kubectl apply -f 02-postgres.yaml
+kubectl apply -f "Legacy yaml/02-postgres.yaml"
 Print-Ok "Postgres applied"
 
-kubectl apply -f 03-traefik-rbac.yaml
-kubectl apply -f 04-traefik-install.yaml
-kubectl apply -f 05-traefik-middlewares.yaml
+kubectl apply -f "Legacy yaml/03-traefik-rbac.yaml"
+kubectl apply -f "Legacy yaml/04-traefik-install.yaml"
+kubectl apply -f "Legacy yaml/05-traefik-middlewares.yaml"
 Print-Ok "Traefik applied"
 
 # =============================================================
@@ -139,7 +139,7 @@ if ($ssInstalled) {
 Print-Step "STEP 4 — Apply ConfigMaps"
 # =============================================================
 
-kubectl apply -f 11-configmaps.yaml
+kubectl apply -f "Legacy yaml/11-configmaps.yaml"
 Print-Ok "ConfigMaps applied for all 5 services"
 
 # Verify ConfigMaps exist
@@ -157,7 +157,7 @@ Print-Step "STEP 5 — Apply Secrets (plain for local, SealedSecrets in prod)"
 
 # For local: apply the plain Secrets directly (values already set for local use)
 # In production: use kubeseal to encrypt and apply SealedSecrets instead
-kubectl apply -f 12-secrets.yaml
+kubectl apply -f "Legacy yaml/12-secrets.yaml"
 Print-Ok "Secrets applied (plain mode for local dev)"
 Print-Warn "REMINDER: In production, seal these with: kubectl create secret ... | kubeseal > sealed.yaml"
 
@@ -166,7 +166,7 @@ Print-Step "STEP 6 — Apply production deployments (anti-affinity patched to 'p
 # =============================================================
 
 # Apply the prod deployments first
-kubectl apply -f 13-api-deployments-prod.yaml
+kubectl apply -f "Legacy yaml/13-api-deployments-prod.yaml"
 Print-Ok "Production deployments applied"
 
 # Patch podAntiAffinity from 'required' to 'preferred' for single-node Minikube

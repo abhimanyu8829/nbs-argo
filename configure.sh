@@ -10,13 +10,13 @@ YOUR_REGISTRY="798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry"
 IMAGE_TAG="v1.0.0"
 
 # Update MetalLB IP range
-sed -i "s/192\.168\.49\.200-192\.168\.49\.250/$YOUR_IP_RANGE/" 01-metallb.yaml
+sed -i "s/192\.168\.49\.200-192\.168\.49\.250/$YOUR_IP_RANGE/" "Legacy yaml/01-metallb.yaml"
 
 # Update domain in all YAML files
 find . -name "*.yaml" -exec sed -i "s/nitroberry\.com/$YOUR_DOMAIN/g" {} \;
 
 # Update Let's Encrypt email
-sed -i "s/admin@nitroberry\.com/$YOUR_EMAIL/" 04-traefik-install.yaml
+sed -i "s/admin@nitroberry\.com/$YOUR_EMAIL/" "Legacy yaml/04-traefik-install.yaml"
 
 # Update database password placeholders
 find . -name "*.yaml" -exec sed -i "s/REPLACE_WITH_STRONG_PASSWORD/$YOUR_DB_PASSWORD/g" {} \;
