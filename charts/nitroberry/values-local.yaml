@@ -1,3 +1,7 @@
+probes:
+  readinessInitialDelaySeconds: 45
+  livenessInitialDelaySeconds: 180
+
 services:
   auth:
     replicas: 1

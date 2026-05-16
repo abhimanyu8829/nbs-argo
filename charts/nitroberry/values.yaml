@@ -1,6 +1,10 @@
 imagePullSecrets:
   - name: ecr-registry-secret
 
+probes:
+  readinessInitialDelaySeconds: 5
+  livenessInitialDelaySeconds: 15
+
 services:
   auth:
     replicas: 2

@@ -65,14 +65,14 @@ spec:
             httpGet:
               path: /health
               port: 8080
-            initialDelaySeconds: 5
+            initialDelaySeconds: {{ .Values.probes.readinessInitialDelaySeconds }}
             periodSeconds: 10
             failureThreshold: 3
           livenessProbe:
             httpGet:
               path: /health
               port: 8080
-            initialDelaySeconds: 15
+            initialDelaySeconds: {{ .Values.probes.livenessInitialDelaySeconds }}
             periodSeconds: 20
             failureThreshold: 3
           securityContext:
