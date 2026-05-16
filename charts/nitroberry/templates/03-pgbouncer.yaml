@@ -1,0 +1,197 @@
+# =============================================================
+# PgBouncer connection pooler for NitroBerry PostgreSQL.
+#
+# Application pods connect to pgbouncer-service on port 6432.
+# PgBouncer reuses a smaller pool of backend connections to Postgres
+# on port 5432.
+# =============================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: pgbouncer-config
+  namespace: database-namespace
+  labels:
+    app: pgbouncer
+    managed-by: nitroberry
+data:
+  pgbouncer.ini: |
+    [databases]
+    postgres = host=postgres-service.database-namespace.svc.cluster.local port=5432 dbname=postgres
+
+    [pgbouncer]
+    listen_addr = 0.0.0.0
+    listen_port = 6432
+    unix_socket_dir = /tmp/pgbouncer
+    auth_type = plain
+    auth_file = /tmp/pgbouncer/userlist.txt
+
+    pool_mode = transaction
+    max_client_conn = 500
+    default_pool_size = 40
+    min_pool_size = 5
+    reserve_pool_size = 10
+    reserve_pool_timeout = 5
+
+    server_idle_timeout = 60
+    server_lifetime = 3600
+    server_reset_query = DISCARD ALL
+    ignore_startup_parameters = extra_float_digits
+
+    admin_users = postgres
+    stats_users = postgres
+    log_connections = 1
+    log_disconnections = 1
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: pgbouncer
+  namespace: database-namespace
+  labels:
+    app: pgbouncer
+    managed-by: nitroberry
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: pgbouncer
+  template:
+    metadata:
+      labels:
+        app: pgbouncer
+        managed-by: nitroberry
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        fsGroup: 70
+      containers:
+        - name: pgbouncer
+          image: ghcr.io/icoretech/pgbouncer-docker:1.24.1
+          imagePullPolicy: IfNotPresent
+          command:
+            - /bin/sh
+            - -ec
+          args:
+            - |
+              printf '"%s" "%s"\n' "$POSTGRES_USER" "$POSTGRES_PASSWORD" > /tmp/pgbouncer/userlist.txt
+              exec /usr/bin/pgbouncer /etc/pgbouncer/pgbouncer.ini
+          env:
+            - name: POSTGRES_USER
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: postgres-user
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-credentials
+                  key: postgres-password
+          ports:
+            - name: pgbouncer
+              containerPort: 6432
+          readinessProbe:
+            tcpSocket:
+              port: 6432
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            timeoutSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: 6432
+            initialDelaySeconds: 20
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: pgbouncer-config
+              mountPath: /etc/pgbouncer/pgbouncer.ini
+              subPath: pgbouncer.ini
+              readOnly: true
+            - name: pgbouncer-runtime
+              mountPath: /tmp/pgbouncer
+      volumes:
+        - name: pgbouncer-config
+          configMap:
+            name: pgbouncer-config
+        - name: pgbouncer-runtime
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pgbouncer-service
+  namespace: database-namespace
+  labels:
+    app: pgbouncer
+    managed-by: nitroberry
+spec:
+  selector:
+    app: pgbouncer
+  ports:
+    - name: pgbouncer
+      protocol: TCP
+      port: 6432
+      targetPort: pgbouncer
+  type: ClusterIP
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: pgbouncer-network-policy
+  namespace: database-namespace
+  labels:
+    managed-by: nitroberry
+spec:
+  podSelector:
+    matchLabels:
+      app: pgbouncer
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: auth-namespace
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cockpit-namespace
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: messenger-namespace
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: social-namespace
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: task-namespace
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vault-namespace
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: workflow-namespace
+      ports:
+        - protocol: TCP
+          port: 6432
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app: postgres
+      ports:
+        - protocol: TCP
+          port: 5432

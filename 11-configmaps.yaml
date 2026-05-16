@@ -1,0 +1,139 @@
+# =============================================================
+# 11-configmaps.yaml - Updated for 7 services
+# =============================================================
+
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth-api-config
+  namespace: auth-namespace
+  labels:
+    app: auth-api
+    managed-by: nitroberry
+data:
+  PORT: "8080"
+  DB_SCHEMA: "auth"
+  DB_HOST: "pgbouncer-service.database-namespace.svc.cluster.local"
+  DB_PORT: "6432"
+  DB_NAME: "postgres"
+  DB_USER: "postgres"
+  JWT_ALGORITHM: "HS256"
+  LOG_LEVEL: "info"
+  ENV: "production"
+  WORKER_ENABLED: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cockpit-api-config
+  namespace: cockpit-namespace
+  labels:
+    app: cockpit-api
+    managed-by: nitroberry
+data:
+  PORT: "8080"
+  DB_SCHEMA: "cockpit"
+  DB_HOST: "pgbouncer-service.database-namespace.svc.cluster.local"
+  DB_PORT: "6432"
+  DB_NAME: "postgres"
+  DB_USER: "postgres"
+  LOG_LEVEL: "info"
+  ENV: "production"
+  WORKER_ENABLED: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: messenger-api-config
+  namespace: messenger-namespace
+  labels:
+    app: messenger-api
+    managed-by: nitroberry
+data:
+  PORT: "8080"
+  DB_SCHEMA: "messenger"
+  DB_HOST: "pgbouncer-service.database-namespace.svc.cluster.local"
+  DB_PORT: "6432"
+  DB_NAME: "postgres"
+  DB_USER: "postgres"
+  LOG_LEVEL: "info"
+  ENV: "production"
+  WORKER_ENABLED: "false"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: social-api-config
+  namespace: social-namespace
+  labels:
+    app: social-api
+    managed-by: nitroberry
+data:
+  PORT: "8080"
+  DB_SCHEMA: "social"
+  DB_HOST: "pgbouncer-service.database-namespace.svc.cluster.local"
+  DB_PORT: "6432"
+  DB_NAME: "postgres"
+  DB_USER: "postgres"
+  LOG_LEVEL: "info"
+  ENV: "production"
+  WORKER_ENABLED: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: task-api-config
+  namespace: task-namespace
+  labels:
+    app: task-api
+    managed-by: nitroberry
+data:
+  PORT: "8080"
+  DB_SCHEMA: "task"
+  DB_HOST: "pgbouncer-service.database-namespace.svc.cluster.local"
+  DB_PORT: "6432"
+  DB_NAME: "postgres"
+  DB_USER: "postgres"
+  LOG_LEVEL: "info"
+  ENV: "production"
+  WORKER_ENABLED: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vault-api-config
+  namespace: vault-namespace
+  labels:
+    app: vault-api
+    managed-by: nitroberry
+data:
+  PORT: "8080"
+  DB_SCHEMA: "vault"
+  DB_HOST: "pgbouncer-service.database-namespace.svc.cluster.local"
+  DB_PORT: "6432"
+  DB_NAME: "postgres"
+  DB_USER: "postgres"
+  LOG_LEVEL: "info"
+  ENV: "production"
+  WORKER_ENABLED: "true"
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: workflow-api-config
+  namespace: workflow-namespace
+  labels:
+    app: workflow-api
+    managed-by: nitroberry
+data:
+  PORT: "8080"
+  DB_SCHEMA: "workflow"
+  DB_HOST: "pgbouncer-service.database-namespace.svc.cluster.local"
+  DB_PORT: "6432"
+  DB_NAME: "postgres"
+  DB_USER: "postgres"
+  LOG_LEVEL: "info"
+  ENV: "production"
+  WORKER_ENABLED: "true"
+
+ 
