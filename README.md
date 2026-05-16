@@ -2,7 +2,6 @@
 
 <div align="center">
 
-![GitOps Flow Diagram](file:///C:/Users/DELL-OS/.gemini/antigravity/brain/a76cc1b5-4939-4bca-b8b5-ec5867502be4/nitroberry_gitops_flow_diagram_1778942229381.png)
 
 </div>
 
