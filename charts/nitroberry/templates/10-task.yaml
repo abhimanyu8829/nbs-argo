@@ -7,6 +7,8 @@ metadata:
     app: task-api
     managed-by: nitroberry
 spec:
+  strategy:
+    type: {{ .Values.services.task.strategyType | default "RollingUpdate" }}
   replicas: {{ .Values.services.task.replicas }}
   selector:
     matchLabels:

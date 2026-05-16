@@ -7,6 +7,8 @@ metadata:
     app: auth-api
     managed-by: nitroberry
 spec:
+  strategy:
+    type: {{ .Values.services.auth.strategyType | default "RollingUpdate" }}
   replicas: {{ .Values.services.auth.replicas }}
   selector:
     matchLabels:

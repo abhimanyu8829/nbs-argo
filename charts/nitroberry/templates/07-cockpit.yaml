@@ -7,6 +7,8 @@ metadata:
     app: cockpit-api
     managed-by: nitroberry
 spec:
+  strategy:
+    type: {{ .Values.services.cockpit.strategyType | default "RollingUpdate" }}
   replicas: {{ .Values.services.cockpit.replicas }}
   selector:
     matchLabels:

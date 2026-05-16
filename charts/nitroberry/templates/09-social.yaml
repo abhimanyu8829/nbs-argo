@@ -7,6 +7,8 @@ metadata:
     app: social-api
     managed-by: nitroberry
 spec:
+  strategy:
+    type: {{ .Values.services.social.strategyType | default "RollingUpdate" }}
   replicas: {{ .Values.services.social.replicas }}
   selector:
     matchLabels:

@@ -7,6 +7,8 @@ metadata:
     app: vault-api
     managed-by: nitroberry
 spec:
+  strategy:
+    type: {{ .Values.services.vault.strategyType | default "RollingUpdate" }}
   replicas: {{ .Values.services.vault.replicas }}
   selector:
     matchLabels:

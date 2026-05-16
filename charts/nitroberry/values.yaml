@@ -4,6 +4,7 @@ imagePullSecrets:
 services:
   auth:
     replicas: 2
+    strategyType: RollingUpdate
     hpa:
       minReplicas: 2
       maxReplicas: 10
@@ -15,6 +16,7 @@ services:
       tag: 0.0.0.20
   cockpit:
     replicas: 2
+    strategyType: RollingUpdate
     hpa:
       minReplicas: 2
       maxReplicas: 10
@@ -26,6 +28,7 @@ services:
       tag: local-test-1
   messenger:
     replicas: 2
+    strategyType: RollingUpdate
     hpa:
       minReplicas: 2
       maxReplicas: 10
@@ -34,6 +37,7 @@ services:
       tag: local-test-1
   social:
     replicas: 2
+    strategyType: RollingUpdate
     hpa:
       minReplicas: 2
       maxReplicas: 10
@@ -45,6 +49,7 @@ services:
       tag: 0.0.0.15
   task:
     replicas: 2
+    strategyType: RollingUpdate
     hpa:
       minReplicas: 2
       maxReplicas: 10
@@ -56,6 +61,7 @@ services:
       tag: 0.0.0.16
   vault:
     replicas: 2
+    strategyType: RollingUpdate
     hpa:
       minReplicas: 2
       maxReplicas: 10
@@ -67,6 +73,7 @@ services:
       tag: 0.0.0.13
   workflow:
     replicas: 2
+    strategyType: RollingUpdate
     hpa:
       minReplicas: 2
       maxReplicas: 10
