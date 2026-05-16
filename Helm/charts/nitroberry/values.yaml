@@ -24,6 +24,11 @@ probes:
   readinessInitialDelaySeconds: 5
   livenessInitialDelaySeconds: 15
 
+# CI/CD image tag flow:
+# 1. GitHub Actions builds and pushes the service image to ECR.
+# 2. The workflow should generate a tag such as 0.0.0.<github.run_number>.
+# 3. The workflow should update the matching services.<name>.<api|worker>.tag value below.
+# 4. ArgoCD sees this values.yaml Git change and deploys the new image.
 services:
   auth:
     replicas: 2
