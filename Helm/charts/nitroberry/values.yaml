@@ -1,6 +1,25 @@
 imagePullSecrets:
   - name: ecr-registry-secret
 
+database:
+  sslMode: disable
+
+redis:
+  enabled: true
+  host: redis-service.database-namespace.svc.cluster.local
+  port: 6379
+  password: ""
+  image:
+    repository: redis
+    tag: 7-alpine
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 256Mi
+
 probes:
   readinessInitialDelaySeconds: 5
   livenessInitialDelaySeconds: 15

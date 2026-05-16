@@ -54,6 +54,11 @@ spec:
                 secretKeyRef:
                   name: messenger-api-secrets
                   key: database-url
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: messenger-api-secrets
+                  key: db-password
           resources:
             requests:
               cpu: "100m"

@@ -54,6 +54,11 @@ spec:
                 secretKeyRef:
                   name: task-api-secrets
                   key: database-url
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: task-api-secrets
+                  key: db-password
           resources:
             requests:
               cpu: "100m"
@@ -97,6 +102,11 @@ spec:
                 secretKeyRef:
                   name: task-api-secrets
                   key: database-url
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: task-api-secrets
+                  key: db-password
           resources:
             requests:
               cpu: "50m"
