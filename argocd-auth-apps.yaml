@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
     chart: auth-api-helm
-    targetRevision: 0.1.1
+    targetRevision: 0.1.2
     helm:
       valueFiles:
         - values.yaml
@@ -45,7 +45,7 @@ spec:
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
     chart: auth-worker-helm
-    targetRevision: 0.1.1
+    targetRevision: 0.1.2
     helm:
       valueFiles:
         - values.yaml
