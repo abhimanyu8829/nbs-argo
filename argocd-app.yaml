@@ -10,7 +10,7 @@ spec:
   source:
     repoURL: https://github.com/dushyantajangid/NitroBerry-Platform.git
     targetRevision: argocdTest
-    path: charts/nitroberry
+    path: Helm/charts/nitroberry
     helm:
       valueFiles:
         - values-local.yaml

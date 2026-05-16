@@ -148,7 +148,7 @@ aws ecr create-repository --repository-name nitroberry/helm --region ap-south-1
    ```
 2. **Deploy the ECR token refresh CronJob** (creates the ArgoCD repository secret as well):
    ```bash
-   kubectl apply -f charts/nitroberry/templates/ecr-helper.yaml
+   kubectl apply -f Helm/charts/nitroberry/templates/ecr-helper.yaml
    ```
 3. **Apply core infrastructure** – namespaces, MetalLB IP pool, PostgreSQL, Traefik, OPA Gatekeeper:
    ```bash
