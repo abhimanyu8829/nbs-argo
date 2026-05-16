@@ -1,0 +1,16 @@
+services:
+  auth:
+    replicas: 2
+  cockpit:
+    replicas: 2
+  messenger:
+    replicas: 2
+  social:
+    replicas: 2
+  task:
+    replicas: 2
+  vault:
+    replicas: 2
+  workflow:
+    replicas: 2
+

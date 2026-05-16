@@ -6,7 +6,7 @@ YOUR_DOMAIN="yourdomain.com"
 YOUR_IP_RANGE="10.0.0.100-10.0.0.150"
 YOUR_EMAIL="admin@yourdomain.com"
 YOUR_DB_PASSWORD="YourSecurePass123!"
-YOUR_REGISTRY="yourregistry.com"
+YOUR_REGISTRY="798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry"
 IMAGE_TAG="v1.0.0"
 
 # Update MetalLB IP range
@@ -18,12 +18,13 @@ find . -name "*.yaml" -exec sed -i "s/nitroberry\.com/$YOUR_DOMAIN/g" {} \;
 # Update Let's Encrypt email
 sed -i "s/admin@nitroberry\.com/$YOUR_EMAIL/" 04-traefik-install.yaml
 
-# Update database password
-find . -name "*.yaml" -exec sed -i "s/nitroberry-secret-password/$YOUR_DB_PASSWORD/" {} \;
+# Update database password placeholders
+find . -name "*.yaml" -exec sed -i "s/REPLACE_WITH_STRONG_PASSWORD/$YOUR_DB_PASSWORD/g" {} \;
 
-# Update container images
-find . -name "*.yaml" -exec sed -i "s|nitroberry/|$YOUR_REGISTRY/|g" {} \;
-find . -name "*.yaml" -exec sed -i "s/:latest/:$IMAGE_TAG/" {} \;
+# Update container image registry and tags
+CURRENT_REGISTRY="798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry"
+find . -name "*.yaml" -exec sed -i "s|$CURRENT_REGISTRY|$YOUR_REGISTRY|g" {} \;
+find . -name "*.yaml" -exec sed -i "s/:REPLACE_WITH_IMAGE_TAG/:$IMAGE_TAG/g" {} \;
 
 echo "Configuration updated successfully!"
 echo "Domain: $YOUR_DOMAIN"

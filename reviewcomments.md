@@ -1,116 +1,42 @@
-# NitroBerry Platform Review Comments
+# NitroBerry Kubernetes Review Comments
 
-This review covers the Kubernetes manifests, local test flow, mock API, and deployment documentation in this repository.
+This review is for the production Kubernetes manifests on the `Stagging` branch.
 
-## Summary
+## High Priority Review Points
 
-The repository is a useful Kubernetes architecture/demo scaffold for a microservices platform, but it should not be treated as production-ready without fixes. The biggest risks are manifest layering, secrets consistency, network policy egress, Traefik dashboard exposure, backup job design, and OPA Gatekeeper policy correctness.
+- `12-secrets.yaml` previously behaved like a broken multi-secret file because multiple Secret objects were not separated cleanly. This is now corrected with proper `---` document separators so Kubernetes can create every Secret independently.
 
-## High Priority Findings
+- PgBouncer was missing from the architecture. A new `03-pgbouncer.yaml` has been added. Application services now connect to `pgbouncer-service.database-namespace.svc.cluster.local:6432`, while PgBouncer connects to Postgres on `postgres-service.database-namespace.svc.cluster.local:5432`.
 
-### 1. Production deployment order overwrites hardened deployments
+- Direct application access to Postgres has been reduced. Application NetworkPolicies now allow egress to the PgBouncer pod on port `6432`; Postgres NetworkPolicy only allows PgBouncer and the backup job to reach Postgres on port `5432`.
 
-- Impacted files: `README.md`, `06-auth-api.yaml` through `10-notify-api.yaml`, `13-api-deployments-prod.yaml`
-- The README production flow applies `13-api-deployments-prod.yaml`, then applies `06-10`.
-- Files `06-10` also define `Deployment` objects with the same names as the production deployments.
-- Applying `06-10` after `13` overwrites production hardening such as resource limits, probes, config/secret wiring, and security context.
-- Recommended action: split service/HPA/Ingress/NetworkPolicy resources from base Deployment resources, or remove Deployments from `06-10` for production use.
+- Postgres was configured as `replicas: 2` without a Postgres HA operator or replication design. This is unsafe for a plain StatefulSet. It has been changed to `replicas: 1`. For true production HA, use a managed database or a tested Postgres operator.
 
-### 2. Base API manifests contain unsafe production values
+- Secret naming was inconsistent between `postgres-secret` and `postgres-credentials`. The manifests now use `postgres-credentials` consistently.
 
-- Impacted files: `06-auth-api.yaml` through `10-notify-api.yaml`
-- API manifests use `:latest` images.
-- Database URLs and passwords are hardcoded directly in Deployment environment variables.
-- Deployments do not include resource requests/limits, probes, or container security context.
-- Recommended action: keep these manifests local-only or replace them with production-safe references to ConfigMaps and Secrets.
+- Several application manifests did not match the shipped Gatekeeper policies. The service Deployments now include `managed-by: nitroberry`, resource requests/limits, non-root pod security context, container security context, and read-only root filesystem settings.
 
-### 3. PostgreSQL secrets are inconsistent
+- Application images used `:latest`. They now use `:REPLACE_WITH_IMAGE_TAG` so DevOps must explicitly set a release tag before production deployment.
 
-- Impacted files: `02-postgres.yaml`, `12-secrets.yaml`, `14-postgres-s3-backup.yaml`
-- `02-postgres.yaml` uses a Secret named `postgres-secret`.
-- `12-secrets.yaml` and the backup CronJob use `postgres-credentials`.
-- This can make Postgres, APIs, and backups use different credentials.
-- Recommended action: use one Secret name and one password source across Postgres, APIs, and backup jobs.
+- OPA Gatekeeper Rego rules were checking `spec.containers`, which is not the correct path for Deployments and StatefulSets. The policies now check `spec.template.spec.containers` and use the current NitroBerry namespaces.
 
-### 4. API NetworkPolicies block DNS egress
+- Traefik had `--api.insecure=true` and exposed the dashboard port through the LoadBalancer service. The insecure dashboard flag has been disabled and the public dashboard service port removed.
 
-- Impacted files: `06-auth-api.yaml` through `10-notify-api.yaml`
-- API egress only allows traffic to the database namespace on TCP `5432`.
-- Services connect to Postgres by DNS name, so they also need egress to kube-dns on TCP/UDP `53`.
-- Without DNS egress, real service pods may fail to resolve `postgres-service.database-namespace.svc.cluster.local`.
-- Recommended action: allow egress from API pods to kube-dns in `kube-system` on port `53`.
+- ArgoCD was pointed at the original source repo. `argocd-app.yaml` now uses `REPLACE_WITH_GIT_REPO_URL` so the final GitOps repository URL must be set explicitly.
 
-### 5. Backup CronJob likely fails at runtime
+## Values DevOps Must Set Before Production
 
-- Impacted file: `14-postgres-s3-backup.yaml`
-- The job uses `postgres:15-alpine` and tries to install AWS CLI at runtime with `apk add` and `pip3 install`.
-- The pod is configured to run as non-root, so package installation is likely to fail.
-- The backup NetworkPolicy also needs DNS egress for Postgres and S3 hostnames.
-- Recommended action: use a prebuilt backup image that already contains PostgreSQL client tools and AWS CLI, then add DNS egress.
+- Replace `REPLACE_WITH_STRONG_PASSWORD` in `12-secrets.yaml`.
+- Replace `REPLACE_WITH_RANDOM_256BIT_SECRET` in `12-secrets.yaml`.
+- Replace `REPLACE_WITH_AWS_ACCESS_KEY`, `REPLACE_WITH_AWS_SECRET_KEY`, and `S3_BUCKET` backup values.
+- Replace every `:REPLACE_WITH_IMAGE_TAG` image tag with a real immutable release tag.
+- Replace `REPLACE_WITH_GIT_REPO_URL` in `argocd-app.yaml`.
+- Replace `nitroberry.com` hostnames with the real production domain.
 
-### 6. Traefik dashboard is exposed insecurely
+## Remaining Production Recommendations
 
-- Impacted file: `04-traefik-install.yaml`
-- Traefik is started with `--api.insecure=true`.
-- Port `8080` is exposed through the LoadBalancer service.
-- This can expose an unauthenticated dashboard in production.
-- Recommended action: disable insecure dashboard access, remove port `8080` from the public service, or protect dashboard access with authentication and network restrictions.
-
-### 7. JWT authentication is placeholder-level
-
-- Impacted files: `05-traefik-middlewares.yaml`, `12-secrets.yaml`, `server.js`
-- The Traefik JWT middleware uses the placeholder secret `your-jwt-secret-key`.
-- App JWT secrets are defined separately and are not wired into Traefik.
-- The mock `/login` endpoint returns a static demo token.
-- Recommended action: wire Traefik and the auth service to the same secret source, replace the mock login flow, and validate real signed tokens.
-
-### 8. OPA Gatekeeper policies inspect incorrect object paths
-
-- Impacted file: `15-opa-gatekeeper.yaml`
-- Several policies inspect paths such as `input.review.object.spec.containers`.
-- Deployments and StatefulSets store containers under `spec.template.spec.containers`.
-- Some policies may not enforce as expected, and others may deny or miss the wrong objects.
-- Recommended action: update Rego rules to handle workload pod templates correctly.
-
-## Medium Priority Findings
-
-### 9. Required labels do not match production pod templates
-
-- Impacted files: `13-api-deployments-prod.yaml`, `15-opa-gatekeeper.yaml`
-- Gatekeeper requires `app` and `managed-by` labels.
-- Production Deployment metadata includes `managed-by`, but pod templates only include `app`.
-- Recommended action: add `managed-by: nitroberry` to all pod templates or adjust the policy scope.
-
-### 10. HPA requires metrics-server but repo does not manage it
-
-- Impacted files: `06-auth-api.yaml` through `10-notify-api.yaml`, `README.md`
-- HPAs are defined for all APIs.
-- `metrics-server` is documented as a prerequisite but not managed by these manifests.
-- Recommended action: add metrics-server installation to the environment bootstrap process or document it as an explicit cluster dependency.
-
-### 11. Single-replica Postgres is not production HA
-
-- Impacted file: `02-postgres.yaml`
-- PostgreSQL runs as one StatefulSet replica with one PVC.
-- This is fine for local/demo usage but not high availability.
-- Recommended action: for production, use a managed database service or a tested Postgres operator/HA setup.
-
-### 12. Local test script changes security behavior
-
-- Impacted file: `local-test.ps1`
-- The local script patches around production scheduling and security settings.
-- This means local behavior is not equivalent to production behavior.
-- Recommended action: keep a separate local overlay and production overlay so test behavior is intentional and repeatable.
-
-## Recommended Cleanup Plan
-
-1. Separate local/demo manifests from production manifests.
-2. Ensure production applies only one Deployment definition per service.
-3. Standardize all Secrets and secret names.
-4. Add DNS egress to all NetworkPolicies that rely on Kubernetes DNS.
-5. Replace runtime package installation in backup jobs with a prebuilt image.
-6. Lock down or remove public Traefik dashboard exposure.
-7. Replace placeholder JWT settings with a real shared secret or JWKS flow.
-8. Fix Gatekeeper Rego paths and test policies against Deployment objects.
-9. Add a documented bootstrap path for cluster dependencies such as metrics-server, Sealed Secrets, and Gatekeeper.
-
+- Do not commit real secret values in Git. Use SealedSecrets, External Secrets Operator, AWS Secrets Manager, or another approved secret-management flow.
+- Confirm whether the backup CronJob image should be replaced with a prebuilt image that already contains Postgres client tools and AWS CLI.
+- Confirm the real health endpoint for each API before relying on `/health` probes.
+- Install required CRDs before applying CRD-backed resources: Traefik CRDs, Gatekeeper CRDs, and ArgoCD Application CRD.
+- Install metrics-server before relying on HPA behavior.

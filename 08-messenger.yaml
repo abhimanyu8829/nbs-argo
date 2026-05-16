@@ -1,0 +1,167 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: messenger-api
+  namespace: messenger-namespace
+  labels:
+    app: messenger-api
+    managed-by: nitroberry
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: messenger-api
+  template:
+    metadata:
+      labels:
+        app: messenger-api
+        managed-by: nitroberry
+    spec:
+      imagePullSecrets:
+        - name: ecr-registry-secret
+      affinity:
+        podAntiAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            - labelSelector:
+                matchLabels:
+                  app: messenger-api
+              topologyKey: kubernetes.io/hostname
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: DoNotSchedule
+          labelSelector:
+            matchLabels:
+              app: messenger-api
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+        - name: api
+          image: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/messenger-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 8080
+          envFrom:
+            - configMapRef:
+                name: messenger-api-config
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: messenger-api-secrets
+                  key: database-url
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "500m"
+              memory: "256Mi"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 20
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: messenger-api-service
+  namespace: messenger-namespace
+spec:
+  selector:
+    app: messenger-api
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 8080
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: messenger-api-hpa
+  namespace: messenger-namespace
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: messenger-api
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+---
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: messenger-api-websecure
+  namespace: messenger-namespace
+spec:
+  entryPoints:
+    - websecure
+  routes:
+    - match: Host(`messenger.nitroberry.com`)
+      kind: Rule
+      services:
+        - name: messenger-api-service
+          port: 8080
+      middlewares:
+        - name: rate-limit
+          namespace: traefik-ingress
+        - name: security-headers
+          namespace: traefik-ingress
+  tls:
+    certResolver: myresolver
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: messenger-api-policy
+  namespace: messenger-namespace
+spec:
+  podSelector:
+    matchLabels:
+      app: messenger-api
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: traefik-ingress
+    ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  - to:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: database-namespace
+      podSelector:
+        matchLabels:
+          app: pgbouncer
+    ports:
+    - protocol: TCP
+      port: 6432
