@@ -10,16 +10,16 @@ spec:
   source:
     repoURL: https://github.com/dushyantajangid/NitroBerry-Platform.git
     targetRevision: argocdTest
-    path: ./
-    directory:
-      recurse: true
-      jsonnet: {}
+    path: charts/nitroberry
+    helm:
+      valueFiles:
+        - values-local.yaml
   destination:
     server: https://kubernetes.default.svc
     namespace: traefik-ingress
   syncPolicy:
     automated:
-      prune: true
+      prune: false
       selfHeal: true
       allowEmpty: false
     syncOptions:

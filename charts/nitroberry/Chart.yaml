@@ -1,0 +1,7 @@
+apiVersion: v2
+name: nitroberry
+description: NitroBerry Kubernetes platform manifests
+type: application
+version: 0.1.0
+appVersion: "local-test"
+
