@@ -17,6 +17,8 @@ spec:
         app: auth-api
         managed-by: nitroberry
     spec:
+      imagePullSecrets:
+        - name: ecr-registry-secret
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -37,7 +39,8 @@ spec:
         fsGroup: 1000
       containers:
         - name: api
-          image: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/auth-api:REPLACE_WITH_IMAGE_TAG
+          image: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/auth-api:0.0.0.27
+          imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 8080
           envFrom:
@@ -76,7 +79,8 @@ spec:
             capabilities:
               drop: ["ALL"]
         - name: worker
-          image: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/auth-worker:REPLACE_WITH_IMAGE_TAG
+          image: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry/auth-worker:0.0.0.20
+          imagePullPolicy: IfNotPresent
           envFrom:
             - configMapRef:
                 name: auth-api-config
