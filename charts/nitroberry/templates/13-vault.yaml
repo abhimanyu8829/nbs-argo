@@ -83,6 +83,8 @@ spec:
           volumeMounts:
             - name: pm2-runtime
               mountPath: /home/node/.pm2
+            - name: app-logs
+              mountPath: /app/logs
         - name: worker
           image: "{{ .Values.services.vault.worker.repository }}:{{ .Values.services.vault.worker.tag }}"
           imagePullPolicy: IfNotPresent
@@ -110,8 +112,12 @@ spec:
           volumeMounts:
             - name: pm2-runtime
               mountPath: /home/node/.pm2
+            - name: app-logs
+              mountPath: /app/logs
       volumes:
         - name: pm2-runtime
+          emptyDir: {}
+        - name: app-logs
           emptyDir: {}
 ---
 apiVersion: v1

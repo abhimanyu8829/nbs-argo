@@ -83,8 +83,12 @@ spec:
           volumeMounts:
             - name: pm2-runtime
               mountPath: /home/node/.pm2
+            - name: app-logs
+              mountPath: /app/logs
       volumes:
         - name: pm2-runtime
+          emptyDir: {}
+        - name: app-logs
           emptyDir: {}
 ---
 apiVersion: v1
