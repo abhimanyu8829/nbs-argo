@@ -80,6 +80,9 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+          volumeMounts:
+            - name: pm2-runtime
+              mountPath: /home/node/.pm2
         - name: worker
           image: "{{ .Values.services.task.worker.repository }}:{{ .Values.services.task.worker.tag }}"
           imagePullPolicy: IfNotPresent
@@ -104,6 +107,12 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
+          volumeMounts:
+            - name: pm2-runtime
+              mountPath: /home/node/.pm2
+      volumes:
+        - name: pm2-runtime
+          emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
