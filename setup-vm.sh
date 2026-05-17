@@ -29,20 +29,71 @@ aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
 aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
 aws configure set region "$AWS_REGION"
 
-# 2. Install K3s (Lightweight bare-metal Kubernetes)
-echo "=> [2/7] Installing K3s (Kubernetes)..."
+# 2. Install Standard Kubernetes (kubeadm, kubelet, containerd)
+echo "=> [2/7] Installing standard Kubernetes (K8s) via kubeadm..."
 if ! command -v kubectl &> /dev/null; then
-    curl -sfL https://get.k3s.io | sh -
+    # Disable swap (required for kubeadm)
+    sudo swapoff -a
+    sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
+
+    # Load modules and configure sysctl for containerd
+    cat <<EOF | sudo tee /etc/modules-load.d/k8s.conf > /dev/null
+overlay
+br_netfilter
+EOF
+    sudo modprobe overlay
+    sudo modprobe br_netfilter
+
+    cat <<EOF | sudo tee /etc/sysctl.d/k8s.conf > /dev/null
+net.bridge.bridge-nf-call-iptables  = 1
+net.bridge.bridge-nf-call-ip6tables = 1
+net.ipv4.ip_forward                 = 1
+EOF
+    sudo sysctl --system > /dev/null
+
+    # Install and configure containerd
+    sudo apt-get update -y > /dev/null
+    sudo apt-get install -y containerd > /dev/null
+    sudo mkdir -p /etc/containerd
+    containerd config default | sudo tee /etc/containerd/config.toml > /dev/null
+    sudo sed -i 's/SystemdCgroup = false/SystemdCgroup = true/g' /etc/containerd/config.toml
+    sudo systemctl restart containerd
+    sudo systemctl enable containerd
+
+    # Install kubeadm, kubelet, kubectl
+    sudo apt-get install -y apt-transport-https ca-certificates curl gpg > /dev/null
+    sudo mkdir -p /etc/apt/keyrings
+    curl -fsSL https://pkgs.k8s.io/core:/stable:/v1.29/deb/Release.key | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg --yes
+    echo 'deb [signed-by=/etc/apt/keyrings/kubernetes-apt-keyring.gpg] https://pkgs.k8s.io/core:/stable:/v1.29/deb/ /' | sudo tee /etc/apt/sources.list.d/kubernetes.list > /dev/null
+    sudo apt-get update -y > /dev/null
+    sudo apt-get install -y kubelet kubeadm kubectl > /dev/null
+    sudo apt-mark hold kubelet kubeadm kubectl > /dev/null
+
+    # Initialize Kubernetes cluster
+    echo "=> Initializing Kubernetes cluster with kubeadm..."
+    sudo kubeadm init --pod-network-cidr=192.168.0.0/16
+
+    # Set up kubeconfig for current user
     mkdir -p ~/.kube
-    sudo cp /etc/rancher/k3s/k3s.yaml ~/.kube/config
+    sudo cp -i /etc/kubernetes/admin.conf ~/.kube/config
     sudo chown $(id -u):$(id -g) ~/.kube/config
     export KUBECONFIG=~/.kube/config
     echo 'export KUBECONFIG=~/.kube/config' >> ~/.bashrc
+
+    # Install Calico CNI for networking
+    echo "=> Installing Calico CNI..."
+    kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/tigera-operator.yaml
+    kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/custom-resources.yaml
+
+    # Untaint the control-plane node so workloads can run on this single-node cluster
+    echo "=> Untainting master node to allow pod scheduling..."
+    kubectl taint nodes --all node-role.kubernetes.io/control-plane- || true
 else
     echo "Kubernetes is already installed."
 fi
 
 echo "=> Waiting for Kubernetes node to be ready..."
+sleep 10
 kubectl wait --for=condition=Ready nodes --all --timeout=600s
 
 # 3. Clone Repository
@@ -72,103 +123,7 @@ kubectl create secret generic ecr-regcred \
   -n argocd --dry-run=client -o yaml | kubectl apply -f -
 
 # Deploy the ecr-helper to keep tokens fresh forever
-echo "=> Deploying ecr-token-refresh CronJob..."
-# Create AWS credentials secret for the cronjob
-kubectl create secret generic aws-creds -n argocd \
-  --from-literal=access-key="$AWS_ACCESS_KEY_ID" \
-  --from-literal=secret-key="$AWS_SECRET_ACCESS_KEY" \
-  --from-literal=region="$AWS_REGION" \
-  --dry-run=client -o yaml | kubectl apply -f -
-
-cat << 'EOF' > /tmp/ecr-helper.yaml
-apiVersion: v1
-kind: ServiceAccount
-metadata:
-  name: ecr-token-refresh-sa
-  namespace: argocd
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: ecr-token-refresh-role
-rules:
-- apiGroups: [""]
-  resources: ["secrets"]
-  verbs: ["get", "create", "patch", "delete"]
-- apiGroups: [""]
-  resources: ["namespaces"]
-  verbs: ["list", "get"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: ecr-token-refresh-binding
-subjects:
-- kind: ServiceAccount
-  name: ecr-token-refresh-sa
-  namespace: argocd
-roleRef:
-  kind: ClusterRole
-  name: ecr-token-refresh-role
-  apiGroup: rbac.authorization.k8s.io
----
-apiVersion: batch/v1
-kind: CronJob
-metadata:
-  name: ecr-token-refresh
-  namespace: argocd
-spec:
-  schedule: "0 */8 * * *"
-  jobTemplate:
-    spec:
-      template:
-        spec:
-          serviceAccountName: ecr-token-refresh-sa
-          containers:
-          - name: ecr-token-refresh
-            image: amazon/aws-cli:latest
-            command:
-            - /bin/sh
-            - -c
-            - |
-              TOKEN=$(aws ecr get-login-password --region $AWS_REGION)
-              for ns in $(kubectl get namespaces -o jsonpath='{.items[*].metadata.name}'); do
-                if [ "$ns" != "kube-system" ] && [ "$ns" != "kube-public" ] && [ "$ns" != "kube-node-lease" ]; then
-                  kubectl delete secret ecr-regcred -n $ns --ignore-not-found
-                  kubectl create secret docker-registry ecr-regcred \
-                    --docker-server=798701233691.dkr.ecr.$AWS_REGION.amazonaws.com \
-                    --docker-username=AWS \
-                    --docker-password="${TOKEN}" \
-                    -n $ns
-                fi
-              done
-              kubectl patch secret ecr-repo-creds -n argocd --type='merge' -p "{\"stringData\":{\"password\":\"${TOKEN}\"}}" || \
-              kubectl create secret generic ecr-repo-creds -n argocd \
-                --from-literal=url=798701233691.dkr.ecr.$AWS_REGION.amazonaws.com \
-                --from-literal=username=AWS \
-                --from-literal=password="${TOKEN}" \
-                --from-literal=enableOCI=true \
-                --from-literal=type=helm
-              kubectl label secret ecr-repo-creds -n argocd argocd.argoproj.io/secret-type=repository --overwrite
-            env:
-            - name: AWS_ACCESS_KEY_ID
-              valueFrom:
-                secretKeyRef:
-                  name: aws-creds
-                  key: access-key
-            - name: AWS_SECRET_ACCESS_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: aws-creds
-                  key: secret-key
-            - name: AWS_REGION
-              valueFrom:
-                secretKeyRef:
-                  name: aws-creds
-                  key: region
-          restartPolicy: OnFailure
-EOF
-kubectl apply -f /tmp/ecr-helper.yaml
+kubectl apply -f Helm/charts/nitroberry/templates/ecr-helper.yaml
 
 # 6. Apply Core Infrastructure & Secrets
 echo "=> [6/7] Applying Core Infrastructure (MetalLB, Traefik, Postgres)..."
