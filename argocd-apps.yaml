@@ -1,457 +1,211 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: auth-api
+  name: namespaces
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "0"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: auth-api-helm
-    targetRevision: 0.1.2
-    helm:
-      valueFiles:
-        - values.yaml
-        - values-local.yaml
+    chart: namespaces
+    targetRevision: 0.1.0
   destination:
     server: https://kubernetes.default.svc
-    namespace: auth-namespace
+    namespace: default
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-      allowEmpty: false
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: auth-worker
+  name: metallb
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "1"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: auth-worker-helm
-    targetRevision: 0.1.2
-    helm:
-      valueFiles:
-        - values.yaml
-        - values-local.yaml
+    chart: metallb
+    targetRevision: 0.1.0
   destination:
     server: https://kubernetes.default.svc
-    namespace: auth-namespace
+    namespace: metallb-system
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-      allowEmpty: false
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
+      - SkipDryRunOnMissingResource=true
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: cockpit-api
+  name: postgres
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "2"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: cockpit-api
-    targetRevision: 0.1.2
-    helm:
-      valueFiles:
-        - values.yaml
-        - values-local.yaml
+    chart: postgres
+    targetRevision: 0.1.0
   destination:
     server: https://kubernetes.default.svc
-    namespace: cockpit-namespace
+    namespace: database-namespace
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-      allowEmpty: false
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: cockpit-worker
+  name: pgbouncer
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: cockpit-worker
-    targetRevision: 0.1.2
-    helm:
-      valueFiles:
-        - values.yaml
-        - values-local.yaml
+    chart: pgbouncer
+    targetRevision: 0.1.0
   destination:
     server: https://kubernetes.default.svc
-    namespace: cockpit-namespace
+    namespace: database-namespace
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-      allowEmpty: false
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: social-api
+  name: redis
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "3"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: social-api
-    targetRevision: 0.1.2
-    helm:
-      valueFiles:
-        - values.yaml
-        - values-local.yaml
+    chart: redis
+    targetRevision: 0.1.0
   destination:
     server: https://kubernetes.default.svc
-    namespace: social-namespace
+    namespace: database-namespace
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-      allowEmpty: false
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: social-worker
+  name: traefik
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "4"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: social-worker
-    targetRevision: 0.1.2
-    helm:
-      valueFiles:
-        - values.yaml
-        - values-local.yaml
+    chart: traefik
+    targetRevision: 0.1.0
   destination:
     server: https://kubernetes.default.svc
-    namespace: social-namespace
+    namespace: traefik-ingress
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-      allowEmpty: false
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
+      - SkipDryRunOnMissingResource=true
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: task-api
+  name: postgres-backup
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "5"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: task-api
-    targetRevision: 0.1.2
-    helm:
-      valueFiles:
-        - values.yaml
-        - values-local.yaml
+    chart: postgres-backup
+    targetRevision: 0.1.0
   destination:
     server: https://kubernetes.default.svc
-    namespace: task-namespace
+    namespace: database-namespace
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-      allowEmpty: false
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
 ---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: task-worker
+  name: opa-gatekeeper
   namespace: argocd
+  annotations:
+    argocd.argoproj.io/sync-wave: "6"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: task-worker
-    targetRevision: 0.1.2
-    helm:
-      valueFiles:
-        - values.yaml
-        - values-local.yaml
+    chart: opa-gatekeeper
+    targetRevision: 0.1.0
   destination:
     server: https://kubernetes.default.svc
-    namespace: task-namespace
+    namespace: gatekeeper-system
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
-      allowEmpty: false
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: vault-api
-  namespace: argocd
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  source:
-    repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: vault-api
-    targetRevision: 0.1.2
-    helm:
-      valueFiles:
-        - values.yaml
-        - values-local.yaml
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: vault-namespace
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-      allowEmpty: false
-    syncOptions:
-      - CreateNamespace=true
-      - ApplyOutOfSyncOnly=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: vault-worker
-  namespace: argocd
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  source:
-    repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: vault-worker
-    targetRevision: 0.1.2
-    helm:
-      valueFiles:
-        - values.yaml
-        - values-local.yaml
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: vault-namespace
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-      allowEmpty: false
-    syncOptions:
-      - CreateNamespace=true
-      - ApplyOutOfSyncOnly=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: workflow-api
-  namespace: argocd
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  source:
-    repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: workflow-api
-    targetRevision: 0.1.2
-    helm:
-      valueFiles:
-        - values.yaml
-        - values-local.yaml
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: workflow-namespace
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-      allowEmpty: false
-    syncOptions:
-      - CreateNamespace=true
-      - ApplyOutOfSyncOnly=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: workflow-worker
-  namespace: argocd
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  source:
-    repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: workflow-worker
-    targetRevision: 0.1.2
-    helm:
-      valueFiles:
-        - values.yaml
-        - values-local.yaml
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: workflow-namespace
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-      allowEmpty: false
-    syncOptions:
-      - CreateNamespace=true
-      - ApplyOutOfSyncOnly=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: messenger-api
-  namespace: argocd
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  source:
-    repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: messenger-api
-    targetRevision: 0.1.2
-    helm:
-      valueFiles:
-        - values.yaml
-        - values-local.yaml
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: messenger-namespace
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-      allowEmpty: false
-    syncOptions:
-      - CreateNamespace=true
-      - ApplyOutOfSyncOnly=true
-    retry:
-      limit: 5
-      backoff:
-        duration: 5s
-        factor: 2
-        maxDuration: 3m
----
-
-
+      - SkipDryRunOnMissingResource=true
+      - ServerSideApply=true

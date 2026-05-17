@@ -1,0 +1,6 @@
+apiVersion: v2
+name: metallb
+description: NitroBerry MetalLB address pool and L2 advertisement
+type: application
+version: 0.1.0
+appVersion: "0.13.10"

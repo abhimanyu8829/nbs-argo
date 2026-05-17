@@ -1,0 +1,6 @@
+apiVersion: v2
+name: opa-gatekeeper
+description: NitroBerry OPA Gatekeeper constraint templates and constraints
+type: application
+version: 0.1.0
+appVersion: "3.14"
