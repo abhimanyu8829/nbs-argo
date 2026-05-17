@@ -79,7 +79,7 @@ spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: cockpit-api-helm
+    chart: cockpit-api
     targetRevision: 0.1.2
     helm:
       valueFiles:
@@ -114,7 +114,7 @@ spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: cockpit-worker-helm
+    chart: cockpit-worker
     targetRevision: 0.1.2
     helm:
       valueFiles:
@@ -149,7 +149,7 @@ spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: social-api-helm
+    chart: social-api
     targetRevision: 0.1.2
     helm:
       valueFiles:
@@ -184,7 +184,7 @@ spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: social-worker-helm
+    chart: social-worker
     targetRevision: 0.1.2
     helm:
       valueFiles:
@@ -219,7 +219,7 @@ spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: task-api-helm
+    chart: task-api
     targetRevision: 0.1.2
     helm:
       valueFiles:
@@ -254,7 +254,7 @@ spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: task-worker-helm
+    chart: task-worker
     targetRevision: 0.1.2
     helm:
       valueFiles:
@@ -289,7 +289,7 @@ spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: vault-api-helm
+    chart: vault-api
     targetRevision: 0.1.2
     helm:
       valueFiles:
@@ -324,7 +324,7 @@ spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: vault-worker-helm
+    chart: vault-worker
     targetRevision: 0.1.2
     helm:
       valueFiles:
@@ -359,7 +359,7 @@ spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: workflow-api-helm
+    chart: workflow-api
     targetRevision: 0.1.2
     helm:
       valueFiles:
@@ -394,7 +394,7 @@ spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: workflow-worker-helm
+    chart: workflow-worker
     targetRevision: 0.1.2
     helm:
       valueFiles:
@@ -429,7 +429,7 @@ spec:
   project: default
   source:
     repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: messenger-api-helm
+    chart: messenger-api
     targetRevision: 0.1.2
     helm:
       valueFiles:
@@ -453,4 +453,5 @@ spec:
         factor: 2
         maxDuration: 3m
 ---
+
 
