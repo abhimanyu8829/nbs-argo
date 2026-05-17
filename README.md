@@ -13,6 +13,10 @@ This repository now owns the Kubernetes platform layer only. API and worker Helm
 
 ```text
 Helm/
+  argocd-apps/
+    values.yaml
+    chart-tags.yaml
+    templates/
   charts/
     nitroberry/
       namespaces/
@@ -66,7 +70,16 @@ flowchart LR
     Cluster --> Infra["Namespaces, Postgres, PgBouncer, Redis, Traefik, Backup, OPA policies"]
 ```
 
-`argocd-apps.yaml` points ArgoCD to ECR, not to local YAML files. App API and worker deployments should be controlled by their own application repos and ArgoCD apps.
+`argocd-apps.yaml` bootstraps the `Helm/argocd-apps` app-of-apps chart. That chart creates the platform ArgoCD Applications that point to ECR.
+
+Only `Helm/argocd-apps/chart-tags.yaml` should be updated by automation when a platform Helm chart version changes:
+
+```yaml
+chartTags:
+  postgres: "0.1.1"
+```
+
+The rest of the ArgoCD Application definition stays stable. App API and worker deployments should be controlled by their own application repos and ArgoCD apps.
 
 ## VM Bootstrap
 
@@ -86,7 +99,7 @@ The script:
 - Installs external controllers with Helm: MetalLB, Gatekeeper, and Traefik CRDs when available.
 - Creates runtime secrets in Kubernetes instead of storing secret values in Git.
 - Pushes infrastructure Helm charts to ECR.
-- Applies `argocd-apps.yaml` so ArgoCD starts syncing the infra charts.
+- Applies `argocd-apps.yaml` so ArgoCD starts syncing the infra app-of-apps chart.
 
 ## Secrets
 
@@ -103,4 +116,5 @@ This repo should contain only placeholders, chart templates, and non-sensitive c
 - Update the MetalLB IP range in `Helm/charts/nitroberry/metallb/values.yaml` for the VM/network.
 - Replace the default Traefik ACME email and JWT middleware secret through chart values before production.
 - Ensure app repos create their own API/worker ConfigMaps, Secrets, image tags, and ArgoCD Applications.
+- Update only `Helm/argocd-apps/chart-tags.yaml` when a platform Helm chart version changes.
 - ArgoCD's ECR OCI token is bootstrapped by `setup-vm.sh`; for long-running production, use a token refresh job or a secret-management integration so ECR credentials do not expire.

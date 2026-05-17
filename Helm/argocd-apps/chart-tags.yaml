@@ -1,0 +1,9 @@
+chartTags:
+  namespaces: "0.1.0"
+  metallb: "0.1.0"
+  postgres: "0.1.0"
+  pgbouncer: "0.1.0"
+  redis: "0.1.0"
+  traefik: "0.1.0"
+  postgres-backup: "0.1.0"
+  opa-gatekeeper: "0.1.0"

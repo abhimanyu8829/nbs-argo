@@ -1,21 +1,26 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: namespaces
+  name: nitroberry-platform-apps
   namespace: argocd
-  annotations:
-    argocd.argoproj.io/sync-wave: "0"
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
   project: default
   source:
-    repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: namespaces
-    targetRevision: 0.1.0
+    repoURL: https://github.com/dushyantajangid/NitroBerry-Platform.git
+    targetRevision: argocdTest
+    path: Helm/argocd-apps
+    helm:
+      valueFiles:
+        - values.yaml
+        - chart-tags.yaml
+      parameters:
+        - name: global.ecrRepoUrl
+          value: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
   destination:
     server: https://kubernetes.default.svc
-    namespace: default
+    namespace: argocd
   syncPolicy:
     automated:
       prune: true
@@ -23,189 +28,3 @@ spec:
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: metallb
-  namespace: argocd
-  annotations:
-    argocd.argoproj.io/sync-wave: "1"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  source:
-    repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: metallb
-    targetRevision: 0.1.0
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: metallb-system
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-      - ApplyOutOfSyncOnly=true
-      - SkipDryRunOnMissingResource=true
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: postgres
-  namespace: argocd
-  annotations:
-    argocd.argoproj.io/sync-wave: "2"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  source:
-    repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: postgres
-    targetRevision: 0.1.0
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: database-namespace
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-      - ApplyOutOfSyncOnly=true
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: pgbouncer
-  namespace: argocd
-  annotations:
-    argocd.argoproj.io/sync-wave: "3"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  source:
-    repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: pgbouncer
-    targetRevision: 0.1.0
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: database-namespace
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-      - ApplyOutOfSyncOnly=true
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: redis
-  namespace: argocd
-  annotations:
-    argocd.argoproj.io/sync-wave: "3"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  source:
-    repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: redis
-    targetRevision: 0.1.0
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: database-namespace
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-      - ApplyOutOfSyncOnly=true
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: traefik
-  namespace: argocd
-  annotations:
-    argocd.argoproj.io/sync-wave: "4"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  source:
-    repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: traefik
-    targetRevision: 0.1.0
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: traefik-ingress
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-      - ApplyOutOfSyncOnly=true
-      - SkipDryRunOnMissingResource=true
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: postgres-backup
-  namespace: argocd
-  annotations:
-    argocd.argoproj.io/sync-wave: "5"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  source:
-    repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: postgres-backup
-    targetRevision: 0.1.0
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: database-namespace
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-      - ApplyOutOfSyncOnly=true
----
-apiVersion: argoproj.io/v1alpha1
-kind: Application
-metadata:
-  name: opa-gatekeeper
-  namespace: argocd
-  annotations:
-    argocd.argoproj.io/sync-wave: "6"
-  finalizers:
-    - resources-finalizer.argocd.argoproj.io
-spec:
-  project: default
-  source:
-    repoURL: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
-    chart: opa-gatekeeper
-    targetRevision: 0.1.0
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: gatekeeper-system
-  syncPolicy:
-    automated:
-      prune: true
-      selfHeal: true
-    syncOptions:
-      - CreateNamespace=true
-      - ApplyOutOfSyncOnly=true
-      - SkipDryRunOnMissingResource=true
-      - ServerSideApply=true

@@ -9,6 +9,7 @@ This repo now contains only the platform infrastructure layer. API and worker He
 - Split platform infrastructure into separate Helm charts under `Helm/charts/nitroberry/` for namespaces, MetalLB config, Postgres, PgBouncer, Redis, Traefik, Postgres S3 backup, and OPA Gatekeeper policies.
 - Removed application namespaces from the platform namespace chart; app repos should create/own their own API and worker namespaces.
 - Updated `argocd-apps.yaml` so ArgoCD can sync the new infra charts from AWS ECR as OCI Helm charts.
+- Added `Helm/argocd-apps/chart-tags.yaml` as the single file automation should update for ArgoCD platform chart versions.
 - Removed the old single ArgoCD app file that pointed to the deleted umbrella chart path.
 - Removed local/direct YAML deployment scripts that referenced the previous manifest layout.
 - Updated `setup-vm.sh` to install missing prerequisites conditionally and bootstrap the platform through Helm plus ArgoCD.
