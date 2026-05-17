@@ -12,6 +12,10 @@ read -s -p "AWS Secret Access Key: " AWS_SECRET_ACCESS_KEY
 echo ""
 read -p "AWS Region (e.g. ap-south-1): " AWS_REGION
 
+# Git Repository Variables
+GIT_REPO_URL="https://github.com/dushyantajangid/NitroBerry-Platform.git"
+GIT_BRANCH="argocdTest" # Change to 'main' or other branch as needed
+
 # 1. Install Dependencies & AWS CLI
 echo ""
 echo "=> [1/7] Installing required dependencies and AWS CLI v2..."
@@ -101,9 +105,11 @@ echo "=> [3/7] Cloning NitroBerry Git repository..."
 if [ -d "NitroBerry-Platform" ]; then
     rm -rf NitroBerry-Platform
 fi
-git clone https://github.com/dushyantajangid/NitroBerry-Platform.git
-cd NitroBerry-Platform
-git checkout argocdTest || true
+git clone "$GIT_REPO_URL"
+# Extract directory name from repo URL
+REPO_DIR=$(basename "$GIT_REPO_URL" .git)
+cd "$REPO_DIR"
+git checkout "$GIT_BRANCH" || true
 
 # 4. Install ArgoCD
 echo "=> [4/7] Installing ArgoCD..."
@@ -116,8 +122,10 @@ kubectl wait --for=condition=available deployment/argocd-server -n argocd --time
 # 5. ECR Login & ArgoCD Repo Configuration
 echo "=> [5/7] Configuring AWS ECR tokens and CronJob..."
 AWS_TOKEN=$(aws ecr get-login-password --region $AWS_REGION)
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
 kubectl create secret generic ecr-regcred \
-  --docker-server=798701233691.dkr.ecr.$AWS_REGION.amazonaws.com \
+  --docker-server=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com \
   --docker-username=AWS \
   --docker-password=$AWS_TOKEN \
   -n argocd --dry-run=client -o yaml | kubectl apply -f -
@@ -146,6 +154,10 @@ kubectl apply -f "Legacy yaml/12-secrets.yaml"
 
 # 7. Start GitOps deployment via ArgoCD
 echo "=> [7/7] Applying ArgoCD Apps (Triggering GitOps deployment)..."
+
+# Dynamically update the ECR URL in argocd-apps.yaml to match the current AWS Account and Region
+sed -i "s/798701233691.dkr.ecr.ap-south-1.amazonaws.com/${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/g" argocd-apps.yaml
+
 kubectl apply -f argocd-apps.yaml
 
 echo ""

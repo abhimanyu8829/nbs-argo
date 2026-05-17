@@ -132,91 +132,47 @@ aws ecr create-repository --repository-name nitroberry/workflow-worker --region 
 
 ---
 
-## 🏗 Phase 3: Kubernetes Core Infrastructure Setup
+## 🚀 Phase 3: Automated Cluster Provisioning (Recommended)
 
-Before we deploy our apps, we need to set up the foundation of our cluster. We will apply manifests from the `Legacy yaml/` directory (or wherever your core manifests reside).
+To drastically simplify the deployment process, we provide an automated bash script (`setup-vm.sh`) that provisions the entire Kubernetes environment, sets up ArgoCD, and bootstraps your GitOps deployment from scratch.
 
-### Step 3.1: Create Namespaces
-```bash
-kubectl apply -f "Legacy yaml/00-namespaces.yaml"
-```
+### What `setup-vm.sh` installs:
+1. **Dependencies & AWS CLI**: Installs necessary tools (curl, git, jq) and the latest AWS CLI v2.
+2. **Kubernetes Environment**: Installs standard K8s components (containerd, kubeadm, kubelet, kubectl) and initializes a single-node cluster using Calico CNI.
+3. **Repository Cloning**: Dynamically clones this GitHub repository based on the configured branch.
+4. **ArgoCD**: Installs the ArgoCD server to manage GitOps deployments.
+5. **AWS ECR Configuration**: Retrieves your AWS ECR credentials and sets up the `ecr-helper` CronJob to continuously refresh tokens.
+6. **Core Infrastructure**: Deploys MetalLB (LoadBalancer), Traefik v3 (Ingress), and Postgres.
+7. **GitOps Trigger**: Dynamically updates ECR endpoints and applies `argocd-apps.yaml` to begin pulling all 11 microservices automatically.
 
-### Step 3.2: Install MetalLB (Load Balancer)
-Bare-metal clusters do not have built-in LoadBalancers like AWS/GCP do. MetalLB fixes this.
-```bash
-# 1. Install MetalLB components
-kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/manifests/namespace.yaml
-kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/manifests/metallb.yaml
+### How to run the automated script:
 
-# 2. Wait for the pods to be running
-kubectl get pods -n metallb-system
+1. Download the script to your bare-metal Ubuntu server:
+   ```bash
+   wget https://raw.githubusercontent.com/dushyantajangid/NitroBerry-Platform/main/setup-vm.sh
+   chmod +x setup-vm.sh
+   ```
 
-# 3. Apply your specific IP Pool configuration
-# (IMPORTANT: Open `Legacy yaml/01-metallb.yaml` and edit the IP range to match your network before running this!)
-kubectl apply -f "Legacy yaml/01-metallb.yaml"
-```
+2. Open the script and modify the configuration variables at the top to match your setup:
+   ```bash
+   nano setup-vm.sh
+   # Update GIT_REPO_URL and GIT_BRANCH if necessary
+   ```
 
-### Step 3.3: Install Traefik v3 (Ingress Controller)
-Traefik acts as the "front door", routing internet traffic (like `auth.nitroberry.com`) to the correct internal pod.
-```bash
-kubectl apply -f "Legacy yaml/03-traefik-rbac.yaml"
-kubectl apply -f "Legacy yaml/04-traefik-install.yaml"
-kubectl apply -f "Legacy yaml/05-traefik-middlewares.yaml"
-```
+3. Execute the script:
+   ```bash
+   ./setup-vm.sh
+   ```
 
-### Step 3.4: Install Databases (Postgres & Redis)
-```bash
-kubectl apply -f "Legacy yaml/02-postgres.yaml"
-# If you have PgBouncer and Redis manifests, apply them here as well
-```
+4. The script will prompt you for your AWS Credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION`). Enter them securely to proceed.
 
-### Step 3.5: Configure Secrets
-Open `Legacy yaml/12-secrets.yaml`. This file contains placeholders like `REPLACE_WITH_STRONG_PASSWORD`. 
-1. Generate real passwords.
-2. Update the file.
-3. Apply it to the cluster:
-```bash
-kubectl apply -f "Legacy yaml/12-secrets.yaml"
-```
+5. Once completed, the script will output the default admin password for your ArgoCD dashboard. You can access it by port-forwarding:
+   ```bash
+   kubectl port-forward svc/argocd-server -n argocd 8080:443
+   ```
+   Open `https://localhost:8080` in your browser to watch ArgoCD deploy your microservices!
 
----
-
-## 🦑 Phase 4: ArgoCD Installation & Configuration
-
-ArgoCD is the brain of our GitOps flow. It lives inside the cluster and pulls our configurations from AWS ECR.
-
-### Step 4.1: Install ArgoCD
-```bash
-kubectl create namespace argocd
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
-
-# Wait for all ArgoCD pods to be Running
-kubectl get pods -n argocd
-```
-
-### Step 4.2: Give ArgoCD access to AWS ECR
-AWS ECR tokens expire every 12 hours. We use a **CronJob** to automatically refresh this token so ArgoCD never loses access.
-
-1. Create the initial token manually:
-```bash
-kubectl create secret generic ecr-regcred \
-  --docker-server=798701233691.dkr.ecr.ap-south-1.amazonaws.com \
-  --docker-username=AWS \
-  --docker-password=$(aws ecr get-login-password --region ap-south-1) \
-  -n argocd
-```
-
-2. Apply the automated refresh CronJob:
-```bash
-kubectl apply -f Helm/charts/nitroberry/templates/ecr-helper.yaml
-```
-
-### Step 4.3: Deploy the NitroBerry Apps via ArgoCD
-We have prepared a master file (`argocd-apps.yaml`) that tells ArgoCD about all 11 of our Helm charts.
-```bash
-kubectl apply -f argocd-apps.yaml
-```
-Once applied, ArgoCD will immediately reach out to AWS ECR, pull the Helm charts, and deploy your entire architecture!
+> **Note**: If you prefer to set up the cluster manually, refer to the `Legacy yaml/` directory and manually apply the manifests for MetalLB, Traefik, Postgres, and ArgoCD in sequential order.
 
 ---
 
