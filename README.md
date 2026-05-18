@@ -4,29 +4,26 @@ This repository now owns the Kubernetes platform layer only. API and worker Helm
 
 ## Current Responsibility
 
-- Creates only platform infrastructure namespaces. Application namespaces are owned by the application repositories.
-- Deploys platform infrastructure Helm charts for MetalLB config, Postgres, PgBouncer, Redis, Traefik, Postgres S3 backup, and OPA Gatekeeper policies.
+- Deploys platform infrastructure Helm charts for MetalLB config, Postgres, PgBouncer, Redis, Traefik, and OPA Gatekeeper policies.
 - Defines ArgoCD `Application` resources that pull those infrastructure charts from AWS ECR as OCI Helm charts.
 - Keeps production secret values out of Git. Runtime secrets are created by `setup-vm.sh` or should be supplied by your production secret-management system.
 
 ## Helm Chart Layout
 
 ```text
-Helm/
+helm/
   argocd-apps/
     values.yaml
     chart-tags.yaml
     templates/
-  charts/
-    nitroberry/
-      namespaces/
-      metallb/
-      postgres/
-      pgbouncer/
-      redis/
-      traefik/
-      postgres-backup/
-      opa-gatekeeper/
+  helm/
+    metallb/
+    postgres/
+    pgbouncer/
+    redis/
+    traefik/
+    opa-gatekeeper/
+  ecr-helper.yaml
   push-infra-charts.sh
 ```
 
@@ -35,27 +32,25 @@ Helm/
 Each chart is packaged locally and pushed to AWS ECR as an OCI Helm chart. Helm pushes to the parent OCI path:
 
 ```bash
-helm push postgres-helm-0.1.0.tgz \
-  oci://798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
+helm push postgres-helm-1.0.0.tgz \
+  oci://<AWS_ACCOUNT_ID>.dkr.ecr.<AWS_REGION>.amazonaws.com/nitroberry
 ```
 
 Because Helm appends the chart name, ECR must have repositories like:
 
 ```bash
-aws ecr create-repository --repository-name nitroberry/namespaces-helm --region ap-south-1
 aws ecr create-repository --repository-name nitroberry/metallb-helm --region ap-south-1
 aws ecr create-repository --repository-name nitroberry/postgres-helm --region ap-south-1
 aws ecr create-repository --repository-name nitroberry/pgbouncer-helm --region ap-south-1
 aws ecr create-repository --repository-name nitroberry/redis-helm --region ap-south-1
 aws ecr create-repository --repository-name nitroberry/traefik-helm --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/postgres-backup-helm --region ap-south-1
 aws ecr create-repository --repository-name nitroberry/opa-gatekeeper-helm --region ap-south-1
 ```
 
 The helper script automatically creates missing ECR repositories (appended with the `-helm` suffix) and pushes all infrastructure charts:
 
 ```bash
-./Helm/push-infra-charts.sh ap-south-1
+./helm/push-infra-charts.sh ap-south-1
 ```
 
 ## ArgoCD Flow
@@ -67,16 +62,16 @@ flowchart LR
     Apps["argocd-apps.yaml"] --> ArgoCD["ArgoCD"]
     ArgoCD --> ECR
     ArgoCD --> Cluster["Kubernetes cluster"]
-    Cluster --> Infra["Namespaces, Postgres, PgBouncer, Redis, Traefik, Backup, OPA policies"]
+    Cluster --> Infra["MetalLB, Postgres, PgBouncer, Redis, Traefik, OPA policies"]
 ```
 
-`argocd-apps.yaml` bootstraps the `Helm/argocd-apps` app-of-apps chart. That chart creates the platform ArgoCD Applications that point to ECR.
+`argocd-apps.yaml` bootstraps the `helm/argocd-apps` app-of-apps chart. That chart creates the platform ArgoCD Applications that point to ECR.
 
-Only `Helm/argocd-apps/chart-tags.yaml` should be updated by automation when a platform Helm chart version changes:
+Only `helm/argocd-apps/chart-tags.yaml` should be updated by automation when a platform Helm chart version changes:
 
 ```yaml
 chartTags:
-  postgres: "0.1.1"
+  postgres: "1.0.0"
 ```
 
 The rest of the ArgoCD Application definition stays stable. App API and worker deployments should be controlled by their own application repos and ArgoCD apps.
@@ -96,10 +91,10 @@ The script:
 - Installs Kubernetes only when no reachable cluster is found.
 - Installs Helm only when missing.
 - Installs ArgoCD if it is not already present.
-- Installs external controllers with Helm: MetalLB, Gatekeeper, and Traefik CRDs when available.
-- Creates runtime secrets in Kubernetes instead of storing secret values in Git.
-- Pushes infrastructure Helm charts to ECR.
-- Applies `argocd-apps.yaml` so ArgoCD starts syncing the infra app-of-apps chart.
+- Configures AWS ECR access tokens and runs `ecr-helper.yaml` CronJob to refresh secrets automatically across namespaces.
+- Pre-creates database credentials placeholders securely in the `database-namespace` namespace.
+- Installs MetalLB network operator in the cluster explicitly.
+- Applies `argocd-apps.yaml` so ArgoCD starts syncing the parent infra app-of-apps chart.
 
 ## Secrets
 
@@ -113,8 +108,8 @@ This repo should contain only placeholders, chart templates, and non-sensitive c
 
 ## Production Notes
 
-- Update the MetalLB IP range in `Helm/charts/nitroberry/metallb/values.yaml` for the VM/network.
+- Update the MetalLB IP range in `helm/helm/metallb/values.yaml` for the VM/network.
 - Replace the default Traefik ACME email and JWT middleware secret through chart values before production.
 - Ensure app repos create their own API/worker ConfigMaps, Secrets, image tags, and ArgoCD Applications.
-- Update only `Helm/argocd-apps/chart-tags.yaml` when a platform Helm chart version changes.
-- ArgoCD's ECR OCI token is bootstrapped by `setup-vm.sh`; for long-running production, use a token refresh job or a secret-management integration so ECR credentials do not expire.
+- Update only `helm/argocd-apps/chart-tags.yaml` when a platform Helm chart version changes.
+- ArgoCD's ECR OCI token is bootstrapped by `setup-vm.sh`; for long-running production, the `ecr-token-refresher` CronJob automatically refreshes ECR tokens every 6 hours in the cluster.

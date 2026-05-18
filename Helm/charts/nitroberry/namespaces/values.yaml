@@ -1,5 +1,0 @@
-namespaces:
-  - metallb-system
-  - gatekeeper-system
-  - traefik-ingress
-  - database-namespace

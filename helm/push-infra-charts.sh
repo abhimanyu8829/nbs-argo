@@ -2,7 +2,7 @@
 set -euo pipefail
 
 AWS_REGION="${1:-${AWS_REGION:-ap-south-1}}"
-CHART_ROOT="${CHART_ROOT:-Helm/charts/nitroberry}"
+CHART_ROOT="${CHART_ROOT:-helm/helm}"
 PACKAGE_DIR="${PACKAGE_DIR:-/tmp/nitroberry-infra-charts}"
 
 if ! command -v aws >/dev/null 2>&1; then

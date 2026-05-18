@@ -117,12 +117,16 @@ ensure_kubernetes_cluster() {
     kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/custom-resources.yaml
   fi
 
-    # Untaint the control-plane node so workloads can run on this single-node cluster
-    echo "=> Untainting master node to allow pod scheduling..."
-    kubectl taint nodes --all node-role.kubernetes.io/control-plane- || true
-else
-    echo "Kubernetes is already installed."
-fi
+  # Untaint the control-plane node so workloads can run on this single-node cluster
+  echo "=> Untainting master node to allow pod scheduling..."
+  kubectl taint nodes --all node-role.kubernetes.io/control-plane- || true
+}
+
+# Run bootstrap sequence
+install_base_packages
+install_aws_cli
+install_helm
+ensure_kubernetes_cluster
 
 echo "=> Waiting for Kubernetes node to be ready..."
 sleep 10
@@ -159,26 +163,26 @@ kubectl create secret generic ecr-regcred \
   -n argocd --dry-run=client -o yaml | kubectl apply -f -
 
 # Deploy the ecr-helper to keep tokens fresh forever
-kubectl apply -f Helm/charts/nitroberry/templates/ecr-helper.yaml
+kubectl apply -f helm/ecr-helper.yaml
 
 # 6. Apply Core Infrastructure & Secrets
-echo "=> [6/7] Applying Core Infrastructure (MetalLB, Traefik, Postgres)..."
-kubectl apply -f "Legacy yaml/00-namespaces.yaml"
+echo "=> [6/7] Applying Core Infrastructure (MetalLB and pre-provisioning secrets)..."
 
-# Install MetalLB explicitly (CRDs first, wait, then IP pool)
+# Pre-create namespaces
+kubectl create namespace database-namespace --dry-run=client -o yaml | kubectl apply -f -
+
+# Create Postgres credentials secret
+kubectl create secret generic postgres-credentials \
+  --from-literal=postgres-user=postgres \
+  --from-literal=postgres-password=nitroberry-prod-db-pass \
+  -n database-namespace --dry-run=client -o yaml | kubectl apply -f -
+
+# Install MetalLB operator explicitly (CRDs first, wait, then IP pool config is managed by helm)
+echo "=> Installing MetalLB operator..."
 kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/manifests/namespace.yaml
 kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/manifests/metallb.yaml
+echo "=> Waiting for MetalLB operator to be ready..."
 kubectl wait --for=condition=Ready pods --all -n metallb-system --timeout=300s
-kubectl apply -f "Legacy yaml/01-metallb.yaml"
-
-# Core services
-kubectl apply -f "Legacy yaml/02-postgres.yaml"
-kubectl apply -f "Legacy yaml/03-traefik-rbac.yaml"
-kubectl apply -f "Legacy yaml/04-traefik-install.yaml"
-kubectl apply -f "Legacy yaml/05-traefik-middlewares.yaml"
-
-echo "=> Applying Initial Secrets (ensure 'Legacy yaml/12-secrets.yaml' has real passwords before production!)"
-kubectl apply -f "Legacy yaml/12-secrets.yaml"
 
 # 7. Start GitOps deployment via ArgoCD
 echo "=> [7/7] Applying ArgoCD Apps (Triggering GitOps deployment)..."

@@ -1,9 +1,0 @@
-{{- range $index, $namespace := .Values.namespaces }}
-{{- if $index }}
----
-{{- end }}
-apiVersion: v1
-kind: Namespace
-metadata:
-  name: {{ $namespace | quote }}
-{{- end }}

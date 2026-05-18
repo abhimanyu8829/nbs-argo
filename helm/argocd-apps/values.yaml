@@ -4,13 +4,6 @@ global:
   ecrRepoUrl: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
 
 applications:
-  namespaces:
-    chart: namespaces
-    namespace: default
-    syncWave: "0"
-    syncOptions:
-      - CreateNamespace=true
-      - ApplyOutOfSyncOnly=true
   metallb:
     chart: metallb-helm
     namespace: metallb-system
@@ -48,17 +41,10 @@ applications:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
       - SkipDryRunOnMissingResource=true
-  postgres-backup:
-    chart: postgres-backup-helm
-    namespace: database-namespace
-    syncWave: "5"
-    syncOptions:
-      - CreateNamespace=true
-      - ApplyOutOfSyncOnly=true
   opa-gatekeeper:
     chart: opa-gatekeeper-helm
     namespace: gatekeeper-system
-    syncWave: "6"
+    syncWave: "5"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
