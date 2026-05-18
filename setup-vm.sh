@@ -4,6 +4,7 @@ set -euo pipefail
 GIT_REPO_URL="${GIT_REPO_URL:-https://github.com/dushyantajangid/NitroBerry-Platform.git}"
 GIT_BRANCH="${GIT_BRANCH:-argocdTest}"
 AWS_REGION_DEFAULT="${AWS_REGION_DEFAULT:-ap-south-1}"
+AWS_REGION="${AWS_REGION:-$AWS_REGION_DEFAULT}"
 K8S_VERSION="${K8S_VERSION:-v1.29}"
 
 log() {

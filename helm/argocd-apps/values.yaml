@@ -3,6 +3,14 @@ global:
   destinationServer: https://kubernetes.default.svc
   ecrRepoUrl: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
 
+chartTags:
+  metallb: "1.0.0"
+  postgres: "1.0.0"
+  pgbouncer: "1.0.0"
+  redis: "1.0.0"
+  traefik: "1.0.0"
+  opa-gatekeeper: "1.0.0"
+
 applications:
   metallb:
     chart: metallb-helm
