@@ -10,8 +10,9 @@ The platform includes:
 - MetalLB for `LoadBalancer` services on a VM.
 - Postgres, PgBouncer, Redis, Traefik, and OPA Gatekeeper policies.
 - ECR token refresh automation for ArgoCD and runtime namespaces.
+- ArgoCD application definitions for product Helm charts stored in ECR.
 
-Application API and worker Helm charts should live in their own application repositories. This repo is only for the platform/infrastructure layer.
+Application API and worker Helm chart source can live in their own application repositories. This repo defines the ArgoCD applications that pull those packaged Helm charts from ECR.
 
 ## Architecture
 
@@ -23,9 +24,11 @@ flowchart LR
     RootApp --> ArgoCD["ArgoCD on VM Kubernetes"]
     ArgoCD --> AppOfApps["helm/argocd-apps"]
     AppOfApps --> ChildApps["ArgoCD child Applications"]
+    ProductCharts["Product Helm Charts in ECR"] --> ECR
     ChildApps --> ECR
     ECR --> Cluster["VM Kubernetes Cluster"]
     Cluster --> Infra["MetalLB, Postgres, PgBouncer, Redis, Traefik, Gatekeeper Policies"]
+    Cluster --> Apps["Auth, Cockpit, Messenger, Social, Task, Vault, Workflow"]
 ```
 
 ## Repository Layout
@@ -62,8 +65,9 @@ Production setup happens in this order:
 5. ArgoCD reads `argocd-apps.yaml`.
 6. ArgoCD renders `helm/argocd-apps`.
 7. The child ArgoCD apps pull platform charts from ECR.
-8. Kubernetes creates platform resources.
-9. Verify all pods, services, ArgoCD apps, MetalLB, and Gatekeeper policies.
+8. The child ArgoCD apps pull product API/worker charts from ECR.
+9. Kubernetes creates platform and product resources.
+10. Verify all pods, services, ArgoCD apps, MetalLB, and Gatekeeper policies.
 
 ## Required Tools
 
@@ -227,17 +231,78 @@ chartTags:
   redis: "1.0.0"
   traefik: "1.0.0"
   opa-gatekeeper: "1.0.0"
+  auth-api: "1.0.0"
+  auth-worker: "1.0.0"
+  cockpit-api: "1.0.0"
+  cockpit-worker: "1.0.0"
+  messenger-api: "1.0.0"
+  social-api: "1.0.0"
+  social-worker: "1.0.0"
+  task-api: "1.0.0"
+  task-worker: "1.0.0"
+  vault-api: "1.0.0"
+  vault-worker: "1.0.0"
+  workflow-api: "1.0.0"
+  workflow-worker: "1.0.0"
 ```
 
-These versions must match the `version:` field in each chart:
+These versions must match the Helm chart versions pushed to ECR. For platform charts, the source is in this repo:
 
 ```text
 helm/helm/<chart-name>/Chart.yaml
 ```
 
+For product charts, the source may live in the service repo, but the packaged chart must exist in ECR with the same version tag.
+
 If you change a chart and bump its `Chart.yaml` version, update the matching value in `chart-tags.yaml`.
 
-### 2.5 Git Repo and Branch
+### 2.5 Product ArgoCD Applications
+
+File:
+
+```text
+helm/argocd-apps/values.yaml
+```
+
+This file now creates ArgoCD apps for these product Helm charts:
+
+```text
+auth-api-helm              -> auth-namespace
+auth-worker-helm           -> auth-namespace
+cockpit-api-helm           -> cockpit-namespace
+cockpit-worker-helm        -> cockpit-namespace
+messenger-api-helm         -> messenger-namespace
+social-api-helm            -> social-namespace
+social-worker-helm         -> social-namespace
+task-api-helm              -> task-namespace
+task-worker-helm           -> task-namespace
+vault-api-helm             -> vault-namespace
+vault-worker-helm          -> vault-namespace
+workflow-api-helm          -> workflow-namespace
+workflow-worker-helm       -> workflow-namespace
+```
+
+These names must match your ECR Helm repositories:
+
+```text
+nitroberry/auth-api-helm
+nitroberry/auth-worker-helm
+nitroberry/cockpit-api-helm
+nitroberry/cockpit-worker-helm
+nitroberry/messenger-api-helm
+nitroberry/social-api-helm
+nitroberry/social-worker-helm
+nitroberry/task-api-helm
+nitroberry/task-worker-helm
+nitroberry/vault-api-helm
+nitroberry/vault-worker-helm
+nitroberry/workflow-api-helm
+nitroberry/workflow-worker-helm
+```
+
+No `messenger-worker-helm` app is configured because that repository was not present in the ECR list. Add it later only after the ECR Helm repository exists.
+
+### 2.6 Git Repo and Branch
 
 File:
 
@@ -261,7 +326,7 @@ export GIT_BRANCH="argocdTest"
 
 If the GitHub repository is public, ArgoCD does not need Git credentials. If it is private, add Git credentials to ArgoCD after bootstrap.
 
-### 2.6 AWS Region
+### 2.7 AWS Region
 
 File:
 
@@ -297,7 +362,7 @@ env:
 
 If your production region is not `ap-south-1`, update this value too.
 
-### 2.7 Postgres Bootstrap Password
+### 2.8 Postgres Bootstrap Password
 
 File:
 
@@ -366,7 +431,7 @@ The script will:
 5. Package each chart.
 6. Push each chart to ECR.
 
-It pushes these repositories:
+It pushes these platform repositories:
 
 ```text
 nitroberry/metallb-helm
@@ -375,6 +440,26 @@ nitroberry/pgbouncer-helm
 nitroberry/redis-helm
 nitroberry/traefik-helm
 nitroberry/opa-gatekeeper-helm
+```
+
+Product Helm charts are not packaged from this repo unless you add their chart source here. Push product Helm charts from their own service repositories or CI pipelines. They must end up in ECR with the names listed in `helm/argocd-apps/values.yaml`.
+
+Required product Helm repositories:
+
+```text
+nitroberry/auth-api-helm
+nitroberry/auth-worker-helm
+nitroberry/cockpit-api-helm
+nitroberry/cockpit-worker-helm
+nitroberry/messenger-api-helm
+nitroberry/social-api-helm
+nitroberry/social-worker-helm
+nitroberry/task-api-helm
+nitroberry/task-worker-helm
+nitroberry/vault-api-helm
+nitroberry/vault-worker-helm
+nitroberry/workflow-api-helm
+nitroberry/workflow-worker-helm
 ```
 
 Check ECR:
@@ -468,7 +553,7 @@ The script will:
 14. Install MetalLB controller and CRDs.
 15. Install Gatekeeper controller and CRDs.
 16. Apply `argocd-apps.yaml`.
-17. ArgoCD starts syncing platform child apps from ECR.
+17. ArgoCD starts syncing platform and product child apps from ECR.
 
 ## Step 8: Verify Kubernetes
 
@@ -495,11 +580,18 @@ Important namespaces should be running:
 
 ```text
 argocd
+auth-namespace
+cockpit-namespace
 database-namespace
-traefik-ingress
-metallb-system
 gatekeeper-system
 kube-system
+messenger-namespace
+metallb-system
+social-namespace
+task-namespace
+traefik-ingress
+vault-namespace
+workflow-namespace
 ```
 
 ## Step 9: Verify ArgoCD
@@ -529,6 +621,7 @@ then ArgoCD can see the application object, but it cannot calculate the sync sta
 - ECR charts were not pushed.
 - `chart-tags.yaml` references a chart version that does not exist in ECR.
 - ArgoCD repo-server cannot reach GitHub or ECR from the VM network.
+- A product chart app points to an ECR Helm repository that does not exist.
 
 Find the exact reason:
 
@@ -703,6 +796,26 @@ chartTags:
 
 6. ArgoCD will sync the new version.
 
+When you change a product chart:
+
+1. Bump that product chart version in its service repository.
+2. Package and push that product chart to ECR.
+3. Update the matching key in:
+
+```text
+helm/argocd-apps/chart-tags.yaml
+```
+
+Example:
+
+```yaml
+chartTags:
+  auth-api: "1.0.1"
+```
+
+4. Commit and push this repo.
+5. ArgoCD will sync the product app from ECR.
+
 ## Troubleshooting
 
 ### Helm lint passes but ArgoCD is Unknown
@@ -816,4 +929,3 @@ PONG
 - Do not leave `REPLACE_WITH_JWT_SECRET` in production.
 - Prefer IAM roles, AWS Secrets Manager, External Secrets Operator, Sealed Secrets, or SOPS for mature production secret handling.
 - If you use static AWS credentials for the current implementation, protect `/root/.aws` on the VM.
-
