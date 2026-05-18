@@ -49,6 +49,17 @@ install_helm() {
   curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 }
 
+install_gatekeeper() {
+  if kubectl get deployment gatekeeper-controller-manager -n gatekeeper-system >/dev/null 2>&1; then
+    echo "Gatekeeper already installed."
+    return
+  fi
+
+  log "Installing OPA Gatekeeper controller"
+  kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/v3.14.0/deploy/gatekeeper.yaml
+  kubectl wait --for=condition=available deployment/gatekeeper-controller-manager -n gatekeeper-system --timeout=300s
+}
+
 install_kubernetes_packages() {
   if command_exists kubeadm && command_exists kubelet && command_exists kubectl; then
     echo "Kubernetes packages already installed."
@@ -180,10 +191,11 @@ kubectl create secret generic postgres-credentials \
 
 # Install MetalLB operator explicitly (CRDs first, wait, then IP pool config is managed by helm)
 echo "=> Installing MetalLB operator..."
-kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/manifests/namespace.yaml
-kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/manifests/metallb.yaml
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/config/manifests/metallb-native.yaml
 echo "=> Waiting for MetalLB operator to be ready..."
 kubectl wait --for=condition=Ready pods --all -n metallb-system --timeout=300s
+
+install_gatekeeper
 
 # 7. Start GitOps deployment via ArgoCD
 echo "=> [7/7] Applying ArgoCD Apps (Triggering GitOps deployment)..."
