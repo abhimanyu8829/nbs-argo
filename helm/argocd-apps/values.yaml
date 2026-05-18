@@ -2,6 +2,9 @@ global:
   argocdNamespace: argocd
   destinationServer: https://kubernetes.default.svc
   ecrRepoUrl: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
+  appHelmValues:
+    imagePullSecrets:
+      - name: ecr-registry-secret
 
 chartTags:
   metallb: "1.0.0"
