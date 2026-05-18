@@ -42,17 +42,17 @@ helm push postgres-0.1.0.tgz \
 Because Helm appends the chart name, ECR must have repositories like:
 
 ```bash
-aws ecr create-repository --repository-name nitroberry/namespaces --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/metallb --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/postgres --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/pgbouncer --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/redis --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/traefik --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/postgres-backup --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/opa-gatekeeper --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/namespaces-helm --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/metallb-helm --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/postgres-helm --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/pgbouncer-helm --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/redis-helm --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/traefik-helm --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/postgres-backup-helm --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/opa-gatekeeper-helm --region ap-south-1
 ```
 
-The helper script creates missing repositories and pushes all infrastructure charts:
+The helper script automatically creates missing ECR repositories (appended with the `-helm` suffix) and pushes all infrastructure charts:
 
 ```bash
 ./Helm/push-infra-charts.sh ap-south-1
