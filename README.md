@@ -35,21 +35,21 @@ Helm/
 Each chart is packaged locally and pushed to AWS ECR as an OCI Helm chart. Helm pushes to the parent OCI path:
 
 ```bash
-helm push postgres-0.1.0.tgz \
+helm push postgres-helm-0.1.0.tgz \
   oci://798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
 ```
 
 Because Helm appends the chart name, ECR must have repositories like:
 
 ```bash
-aws ecr create-repository --repository-name nitroberry/namespaces --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/metallb --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/postgres --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/pgbouncer --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/redis --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/traefik --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/postgres-backup --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/opa-gatekeeper --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/namespaces-helm --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/metallb-helm --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/postgres-helm --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/pgbouncer-helm --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/redis-helm --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/traefik-helm --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/postgres-backup-helm --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/opa-gatekeeper-helm --region ap-south-1
 ```
 
 The helper script creates missing repositories and pushes all infrastructure charts:

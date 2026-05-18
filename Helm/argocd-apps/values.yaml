@@ -12,7 +12,7 @@ applications:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
   metallb:
-    chart: metallb
+    chart: metallb-helm
     namespace: metallb-system
     syncWave: "1"
     syncOptions:
@@ -20,28 +20,28 @@ applications:
       - ApplyOutOfSyncOnly=true
       - SkipDryRunOnMissingResource=true
   postgres:
-    chart: postgres
+    chart: postgres-helm
     namespace: database-namespace
     syncWave: "2"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
   pgbouncer:
-    chart: pgbouncer
+    chart: pgbouncer-helm
     namespace: database-namespace
     syncWave: "3"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
   redis:
-    chart: redis
+    chart: redis-helm
     namespace: database-namespace
     syncWave: "3"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
   traefik:
-    chart: traefik
+    chart: traefik-helm
     namespace: traefik-ingress
     syncWave: "4"
     syncOptions:
@@ -49,14 +49,14 @@ applications:
       - ApplyOutOfSyncOnly=true
       - SkipDryRunOnMissingResource=true
   postgres-backup:
-    chart: postgres-backup
+    chart: postgres-backup-helm
     namespace: database-namespace
     syncWave: "5"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
   opa-gatekeeper:
-    chart: opa-gatekeeper
+    chart: opa-gatekeeper-helm
     namespace: gatekeeper-system
     syncWave: "6"
     syncOptions:
