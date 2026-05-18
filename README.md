@@ -153,10 +153,17 @@ Go to your cloud provider (AWS EC2, DigitalOcean, Azure, etc.) and launch a Virt
 * **Disk Space:** 50 GB SSD
 * **Network:** Must have a Public IP address assigned.
 
-**Security Group / Firewall Rules to Open:**
-* Port `22` (TCP) - For SSH access
-* Port `80` (TCP) - For HTTP traffic (Traefik)
-* Port `443` (TCP) - For HTTPS traffic (Traefik)
+**AWS EC2 Security Group (Firewall) Configuration:**
+You must configure the Security Group attached to your EC2 instance to whitelist the following inbound rules:
+
+| Type | Protocol | Port Range | Source | Description |
+|------|----------|------------|--------|-------------|
+| SSH | TCP | `22` | `0.0.0.0/0` (Or your IP) | Required to connect to the server |
+| HTTP | TCP | `80` | `0.0.0.0/0` | Required for Let's Encrypt ACME challenges & web traffic |
+| HTTPS | TCP | `443` | `0.0.0.0/0` | Required for secure web traffic to the Traefik Ingress |
+| Custom TCP | TCP | `8080` | `0.0.0.0/0` | Optional: To access ArgoCD UI without port-forwarding |
+
+*Note: All outbound (egress) traffic should be allowed (`0.0.0.0/0` on All Traffic) so the server can download packages and pull from ECR.*
 
 #### Step 2.2: SSH Into the Virtual Machine
 Locate the private SSH key (`.pem` or `.id_rsa`) you assigned to the VM.
