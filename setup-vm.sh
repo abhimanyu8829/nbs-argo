@@ -113,8 +113,12 @@ git checkout "$GIT_BRANCH" || true
 
 # 4. Install ArgoCD
 echo "=> [4/7] Installing ArgoCD..."
-kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml > /dev/null
+if ! kubectl get namespace argocd >/dev/null 2>&1; then
+    kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml > /dev/null
+else
+    echo "ArgoCD namespace already exists, skipping installation."
+fi
 
 echo "=> Waiting for ArgoCD server to be ready (this may take a minute)..."
 kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
@@ -124,7 +128,7 @@ echo "=> [5/7] Configuring AWS ECR tokens and CronJob..."
 AWS_TOKEN=$(aws ecr get-login-password --region $AWS_REGION)
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-kubectl create secret generic ecr-regcred \
+kubectl create secret docker-registry ecr-regcred \
   --docker-server=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com \
   --docker-username=AWS \
   --docker-password=$AWS_TOKEN \
@@ -138,8 +142,12 @@ echo "=> [6/7] Applying Core Infrastructure (MetalLB, Traefik, Postgres)..."
 kubectl apply -f "Legacy yaml/00-namespaces.yaml"
 
 # Install MetalLB explicitly (CRDs first, wait, then IP pool)
-kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/manifests/namespace.yaml
-kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/manifests/metallb.yaml
+if ! kubectl get namespace metallb-system >/dev/null 2>&1; then
+    kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/manifests/namespace.yaml
+    kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/manifests/metallb.yaml
+else
+    echo "MetalLB namespace already exists, skipping base installation."
+fi
 kubectl wait --for=condition=Ready pods --all -n metallb-system --timeout=300s
 kubectl apply -f "Legacy yaml/01-metallb.yaml"
 
