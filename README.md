@@ -1,222 +1,120 @@
-# NitroBerry — Production-Ready Kubernetes Microservices Architecture
+# NitroBerry Platform Infrastructure
 
-<div align="center">
-  <p><strong>A complete, bare-metal Kubernetes GitOps deployment guide.</strong></p>
-</div>
+This repository now owns the Kubernetes platform layer only. API and worker Helm charts are expected to live with their respective application repositories.
 
----
+## Current Responsibility
 
-## 📋 Table of Contents
-- [Overview](#overview)
-- [Full Architecture Diagram & GitOps Flow](#full-architecture-diagram--gitops-flow)
-- [Phase 1: Prerequisites](#phase-1-prerequisites)
-- [Phase 2: AWS ECR Repository Setup](#phase-2-aws-ecr-repository-setup)
-- [Phase 3: Kubernetes Core Infrastructure Setup](#phase-3-kubernetes-core-infrastructure-setup)
-- [Phase 4: ArgoCD Installation & Configuration](#phase-4-argocd-installation--configuration)
-- [Phase 5: The CI/CD Pipeline (GitHub Actions)](#phase-5-the-cicd-pipeline-github-actions)
-- [Production Checklist](#production-checklist)
-- [Troubleshooting](#troubleshooting)
+- Creates only platform infrastructure namespaces. Application namespaces are owned by the application repositories.
+- Deploys platform infrastructure Helm charts for MetalLB config, Postgres, PgBouncer, Redis, Traefik, Postgres S3 backup, and OPA Gatekeeper policies.
+- Defines ArgoCD `Application` resources that pull those infrastructure charts from AWS ECR as OCI Helm charts.
+- Keeps production secret values out of Git. Runtime secrets are created by `setup-vm.sh` or should be supplied by your production secret-management system.
 
----
+## Helm Chart Layout
 
-## 🌟 Overview
-NitroBerry is a **bare-metal, production-grade Kubernetes platform** that runs **seven microservices** (Auth, Cockpit, Messenger, Social, Task, Vault, Workflow). 
-
-Each microservice is deployed using its own independent **Helm chart**. For most services, there is an **API** container and a **Worker** container. 
-
-This repository relies on a **100% automated GitOps flow**:
-1. You push code to GitHub.
-2. GitHub Actions builds the Docker images and the Helm charts.
-3. Both the images and Helm charts are pushed to **AWS ECR (Elastic Container Registry)**.
-4. **ArgoCD** (running inside your Kubernetes cluster) automatically detects the new Helm charts and updates your live production environment. **You never run `kubectl apply` for application updates.**
-
----
-
-## 📐 Full Architecture Diagram & GitOps Flow
-
-Below is the complete **GitOps workflow** detailing how code travels from a developer's machine to the production Kubernetes cluster.
-
-```mermaid
-flowchart TD
-    %% Define Nodes
-    Dev["👨‍💻 Developer"]
-    Git["🐙 GitHub Repository\n(main branch)"]
-    
-    subgraph CI ["GitHub Actions (CI Pipeline)"]
-        Build["🔨 Build Docker Images"]
-        Test["✅ Run Tests & Lint"]
-        Bump["📈 Increment Chart Version\n(Chart.yaml)"]
-    end
-    
-    subgraph Registry ["AWS ECR (Mumbai)"]
-        DockerRepo["📦 Docker Images\n(nitroberry/*-api & *-worker)"]
-        HelmRepo["☸️ OCI Helm Charts\n(Same ECR Repositories!)"]
-    end
-    
-    subgraph K8s ["Kubernetes Production Cluster"]
-        ArgoCD["🦑 ArgoCD\n(GitOps Controller)"]
-        CronJob["⏱️ ecr-helper CronJob\n(Runs every 8h)"]
-        Traefik["🚦 Traefik v3\n(Ingress Controller)"]
-        Services["⚙️ 11 Independent Apps\n(API & Worker Pods)"]
-    end
-
-    %% Flow Definitions
-    Dev -- "1. Push Code" --> Git
-    Git -- "2. Trigger Action" --> Build
-    Build --> Test
-    Test --> Bump
-    
-    Build -- "3. Push Tagged Images" --> DockerRepo
-    Bump -- "4. Package & Push OCI Charts" --> HelmRepo
-    
-    ArgoCD -- "5. Polls for New Charts" --> HelmRepo
-    ArgoCD -- "6. Applies Changes" --> Services
-    
-    CronJob -- "7. Requests Fresh Token" --> Registry
-    CronJob -- "8. Updates Secrets" --> ArgoCD
-    CronJob -- "8. Updates Secrets" --> Services
-    
-    Traefik -- "9. Routes Traffic" --> Services
+```text
+Helm/
+  argocd-apps/
+    values.yaml
+    chart-tags.yaml
+    templates/
+  charts/
+    nitroberry/
+      namespaces/
+      metallb/
+      postgres/
+      pgbouncer/
+      redis/
+      traefik/
+      postgres-backup/
+      opa-gatekeeper/
+  push-infra-charts.sh
 ```
 
----
+## ECR Helm Repositories
 
-## 🚀 Phase 1: Prerequisites
-
-Before touching the production cluster, ensure you have:
-1. **A Kubernetes Cluster** (v1.28+) running.
-2. **`kubectl`** installed on your local machine and connected to your cluster.
-3. **AWS CLI** installed and configured with an IAM user that has `AmazonEC2ContainerRegistryFullAccess`.
-4. **A Registered Domain** (e.g., `nitroberry.com`) with a Wildcard DNS record (`*.nitroberry.com`) pointing to your cluster's public LoadBalancer IP.
-
----
-
-## 📦 Phase 2: AWS ECR Repository Setup
-
-AWS ECR (Elastic Container Registry) acts as our storage for both Docker images and Helm charts. 
-
-In this architecture, **the Docker image and its corresponding Helm chart are pushed to the exact same repository** (except for `auth`, which has a dedicated helm repo).
-
-If you haven't created them yet, run these commands in your terminal to create the required AWS ECR repositories:
+Each chart is packaged locally and pushed to AWS ECR as an OCI Helm chart. Helm pushes to the parent OCI path:
 
 ```bash
-# Auth Service (Special Case: Separate Helm Repos)
-aws ecr create-repository --repository-name nitroberry/auth-api --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/auth-api-helm --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/auth-worker --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/auth-worker-helm --region ap-south-1
-
-# Cockpit Service
-aws ecr create-repository --repository-name nitroberry/cockpit-api --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/cockpit-worker --region ap-south-1
-
-# Messenger Service
-aws ecr create-repository --repository-name nitroberry/messenger-api --region ap-south-1
-
-# Social Service
-aws ecr create-repository --repository-name nitroberry/social-api --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/social-worker --region ap-south-1
-
-# Task Service
-aws ecr create-repository --repository-name nitroberry/task-api --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/task-worker --region ap-south-1
-
-# Vault Service
-aws ecr create-repository --repository-name nitroberry/vault-api --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/vault-worker --region ap-south-1
-
-# Workflow Service
-aws ecr create-repository --repository-name nitroberry/workflow-api --region ap-south-1
-aws ecr create-repository --repository-name nitroberry/workflow-worker --region ap-south-1
+helm push postgres-0.1.0.tgz \
+  oci://798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
 ```
 
----
+Because Helm appends the chart name, ECR must have repositories like:
 
-## 🚀 Phase 3: Automated Cluster Provisioning (Recommended)
+```bash
+aws ecr create-repository --repository-name nitroberry/namespaces --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/metallb --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/postgres --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/pgbouncer --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/redis --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/traefik --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/postgres-backup --region ap-south-1
+aws ecr create-repository --repository-name nitroberry/opa-gatekeeper --region ap-south-1
+```
 
-To drastically simplify the deployment process, we provide an automated bash script (`setup-vm.sh`) that provisions the entire Kubernetes environment, sets up ArgoCD, and bootstraps your GitOps deployment from scratch.
+The helper script creates missing repositories and pushes all infrastructure charts:
 
-### What `setup-vm.sh` installs:
-1. **Dependencies & AWS CLI**: Installs necessary tools (curl, git, jq) and the latest AWS CLI v2.
-2. **Kubernetes Environment**: Installs standard K8s components (containerd, kubeadm, kubelet, kubectl) and initializes a single-node cluster using Calico CNI.
-3. **Repository Cloning**: Dynamically clones this GitHub repository based on the configured branch.
-4. **ArgoCD**: Installs the ArgoCD server to manage GitOps deployments.
-5. **AWS ECR Configuration**: Retrieves your AWS ECR credentials and sets up the `ecr-helper` CronJob to continuously refresh tokens.
-6. **Core Infrastructure**: Deploys MetalLB (LoadBalancer), Traefik v3 (Ingress), and Postgres.
-7. **GitOps Trigger**: Dynamically updates ECR endpoints and applies `argocd-apps.yaml` to begin pulling all 11 microservices automatically.
+```bash
+./Helm/push-infra-charts.sh ap-south-1
+```
 
-### How to run the automated script:
+## ArgoCD Flow
 
-1. Download the script to your bare-metal Ubuntu server:
-   ```bash
-   wget https://raw.githubusercontent.com/dushyantajangid/NitroBerry-Platform/main/setup-vm.sh
-   chmod +x setup-vm.sh
-   ```
+```mermaid
+flowchart LR
+    Repo["NitroBerry Platform Repo"] --> Package["Package infra Helm charts"]
+    Package --> ECR["AWS ECR OCI Helm registry"]
+    Apps["argocd-apps.yaml"] --> ArgoCD["ArgoCD"]
+    ArgoCD --> ECR
+    ArgoCD --> Cluster["Kubernetes cluster"]
+    Cluster --> Infra["Namespaces, Postgres, PgBouncer, Redis, Traefik, Backup, OPA policies"]
+```
 
-2. Open the script and modify the configuration variables at the top to match your setup:
-   ```bash
-   nano setup-vm.sh
-   # Update GIT_REPO_URL and GIT_BRANCH if necessary
-   ```
+`argocd-apps.yaml` bootstraps the `Helm/argocd-apps` app-of-apps chart. That chart creates the platform ArgoCD Applications that point to ECR.
 
-3. Execute the script:
-   ```bash
-   ./setup-vm.sh
-   ```
+Only `Helm/argocd-apps/chart-tags.yaml` should be updated by automation when a platform Helm chart version changes:
 
-4. The script will prompt you for your AWS Credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_REGION`). Enter them securely to proceed.
+```yaml
+chartTags:
+  postgres: "0.1.1"
+```
 
-5. Once completed, the script will output the default admin password for your ArgoCD dashboard. You can access it by port-forwarding:
-   ```bash
-   kubectl port-forward svc/argocd-server -n argocd 8080:443
-   ```
-   Open `https://localhost:8080` in your browser to watch ArgoCD deploy your microservices!
+The rest of the ArgoCD Application definition stays stable. App API and worker deployments should be controlled by their own application repos and ArgoCD apps.
 
-> **Note**: If you prefer to set up the cluster manually, refer to the `Legacy yaml/` directory and manually apply the manifests for MetalLB, Traefik, Postgres, and ArgoCD in sequential order.
+## VM Bootstrap
 
----
+Run this on the target Ubuntu VM:
 
-## ⚙️ Phase 5: The CI/CD Pipeline (GitHub Actions)
+```bash
+chmod +x setup-vm.sh
+./setup-vm.sh
+```
 
-When you are ready to make a code change, you don't need to touch the server.
+The script:
 
-1. **Commit your code** to the `main` branch.
-2. **GitHub Actions** will automatically trigger. You can watch the progress in the "Actions" tab on GitHub.
-3. The pipeline will:
-   - Run your unit tests.
-   - Build a new Docker image for the service you changed.
-   - Tag it (e.g., `0.0.0.52`).
-   - Push the image to AWS ECR.
-   - Automatically edit the `Chart.yaml` file to increment the version.
-   - Package the Helm chart and push it as an OCI artifact to AWS ECR.
-   - Commit the updated `Chart.yaml` back to GitHub.
-4. Within 3 minutes, **ArgoCD** will notice the new Helm chart version in ECR and automatically upgrade your live pods with zero downtime (Rolling Update).
+- Installs base tools only when missing.
+- Installs Kubernetes only when no reachable cluster is found.
+- Installs Helm only when missing.
+- Installs ArgoCD if it is not already present.
+- Installs external controllers with Helm: MetalLB, Gatekeeper, and Traefik CRDs when available.
+- Creates runtime secrets in Kubernetes instead of storing secret values in Git.
+- Pushes infrastructure Helm charts to ECR.
+- Applies `argocd-apps.yaml` so ArgoCD starts syncing the infra app-of-apps chart.
 
----
+## Secrets
 
-## ✅ Production Checklist
+Do not commit real secret values to this repo. Production values should live in one of these places:
 
-Before officially going live, ensure you have:
-- [ ] Changed the MetalLB IP pool to match your public/private network block.
-- [ ] Replaced all database passwords in `12-secrets.yaml` with securely generated ones.
-- [ ] Replaced the JWT secret with a base64 encoded string.
-- [ ] Updated the `host:` fields in your Helm `values.yaml` files to match your real domain (e.g., `auth.yourdomain.com`).
-- [ ] Pointed your DNS provider (Route53, Cloudflare, etc.) to the Traefik LoadBalancer IP.
+- Kubernetes Secrets created by the bootstrap process.
+- AWS Secrets Manager plus External Secrets Operator.
+- Sealed Secrets or SOPS-encrypted values if the team wants Git-managed encrypted secrets.
 
----
+This repo should contain only placeholders, chart templates, and non-sensitive configuration.
 
-## 🛠 Troubleshooting
+## Production Notes
 
-**Q: My Pods are stuck in `ImagePullBackOff`.**
-A: Your Kubernetes nodes don't have permission to pull the images from AWS ECR. Verify that the `ecr-regcred` secret exists in the pod's namespace. The `ecr-helper` CronJob should create this automatically.
-
-**Q: ArgoCD says "Failed to fetch OCI chart".**
-A: The ArgoCD repository credentials have expired. Check if the `ecr-helper` CronJob in the `argocd` namespace is running successfully every 8 hours.
-
-**Q: I pushed code but my pods didn't update.**
-A: Check GitHub Actions to ensure the workflow passed. Then, check the ArgoCD UI. If ArgoCD says "Synced", ensure that the `appVersion` in your `Chart.yaml` actually updated to match the new Docker image tag.
-
----
-<div align="center">
-  <b>Happy Deploying! 🚀</b>
-</div>
+- Update the MetalLB IP range in `Helm/charts/nitroberry/metallb/values.yaml` for the VM/network.
+- Replace the default Traefik ACME email and JWT middleware secret through chart values before production.
+- Ensure app repos create their own API/worker ConfigMaps, Secrets, image tags, and ArgoCD Applications.
+- Update only `Helm/argocd-apps/chart-tags.yaml` when a platform Helm chart version changes.
+- ArgoCD's ECR OCI token is bootstrapped by `setup-vm.sh`; for long-running production, use a token refresh job or a secret-management integration so ECR credentials do not expire.

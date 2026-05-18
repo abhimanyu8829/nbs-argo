@@ -1,0 +1,66 @@
+global:
+  argocdNamespace: argocd
+  destinationServer: https://kubernetes.default.svc
+  ecrRepoUrl: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
+
+applications:
+  namespaces:
+    chart: namespaces
+    namespace: default
+    syncWave: "0"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+  metallb:
+    chart: metallb
+    namespace: metallb-system
+    syncWave: "1"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+      - SkipDryRunOnMissingResource=true
+  postgres:
+    chart: postgres
+    namespace: database-namespace
+    syncWave: "2"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+  pgbouncer:
+    chart: pgbouncer
+    namespace: database-namespace
+    syncWave: "3"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+  redis:
+    chart: redis
+    namespace: database-namespace
+    syncWave: "3"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+  traefik:
+    chart: traefik
+    namespace: traefik-ingress
+    syncWave: "4"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+      - SkipDryRunOnMissingResource=true
+  postgres-backup:
+    chart: postgres-backup
+    namespace: database-namespace
+    syncWave: "5"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+  opa-gatekeeper:
+    chart: opa-gatekeeper
+    namespace: gatekeeper-system
+    syncWave: "6"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+      - SkipDryRunOnMissingResource=true
+      - ServerSideApply=true

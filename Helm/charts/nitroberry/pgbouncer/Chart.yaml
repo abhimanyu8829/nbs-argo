@@ -1,0 +1,6 @@
+apiVersion: v2
+name: pgbouncer
+description: NitroBerry PgBouncer connection pooler
+type: application
+version: 0.1.0
+appVersion: "1.24.1"
