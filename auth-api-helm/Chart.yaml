@@ -1,0 +1,6 @@
+apiVersion: v2
+appVersion: 0.0.6
+description: NitroBerry Auth API Helm chart
+name: auth-api-helm
+type: application
+version: 0.0.6
