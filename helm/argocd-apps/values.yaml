@@ -152,7 +152,7 @@ applications:
   messenger-api:
     chart: messenger-api-helm
     namespace: messenger-namespace
-    syncWave: "15"
+    syncWave: "10"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
@@ -167,10 +167,10 @@ applications:
       topologySpreadConstraints:
         enabled: false
       probes:
-        readiness:
-          path: /api/health
         liveness:
-          path: /api/health
+          path: /socket.io/socket.io.js
+        readiness:
+          path: /socket.io/socket.io.js
   social-api:
     chart: social-api-helm
     namespace: social-namespace
