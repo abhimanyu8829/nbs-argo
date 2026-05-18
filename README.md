@@ -35,7 +35,7 @@ Helm/
 Each chart is packaged locally and pushed to AWS ECR as an OCI Helm chart. Helm pushes to the parent OCI path:
 
 ```bash
-helm push postgres-0.1.0.tgz \
+helm push postgres-helm-0.1.0.tgz \
   oci://798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
 ```
 

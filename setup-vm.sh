@@ -117,159 +117,76 @@ ensure_kubernetes_cluster() {
     kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/custom-resources.yaml
   fi
 
-  kubectl taint nodes --all node-role.kubernetes.io/control-plane- || true
-  kubectl wait --for=condition=Ready nodes --all --timeout=600s
-}
-
-clone_or_update_repo() {
-  log "Cloning or updating NitroBerry platform repository"
-  REPO_DIR="$(basename "$GIT_REPO_URL" .git)"
-
-  if [ -d "$REPO_DIR/.git" ]; then
-    cd "$REPO_DIR"
-    git fetch origin "$GIT_BRANCH"
-    git checkout "$GIT_BRANCH"
-    git pull --ff-only origin "$GIT_BRANCH"
-  else
-    git clone --branch "$GIT_BRANCH" "$GIT_REPO_URL"
-    cd "$REPO_DIR"
-  fi
-}
-
-install_argocd() {
-  log "Installing ArgoCD if missing"
-  kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-
-  if kubectl get deployment argocd-server -n argocd >/dev/null 2>&1; then
-    echo "ArgoCD already installed."
-  else
-    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml >/dev/null
-  fi
-
-  kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=600s
-}
-
-install_external_controllers() {
-  log "Installing external controllers through Helm"
-  helm repo add metallb https://metallb.github.io/metallb --force-update >/dev/null
-  helm repo add gatekeeper https://open-policy-agent.github.io/gatekeeper/charts --force-update >/dev/null
-  helm repo add traefik https://traefik.github.io/charts --force-update >/dev/null
-  helm repo update >/dev/null
-
-  helm upgrade --install metallb metallb/metallb \
-    --namespace metallb-system \
-    --create-namespace \
-    --wait
-
-  helm upgrade --install gatekeeper gatekeeper/gatekeeper \
-    --namespace gatekeeper-system \
-    --create-namespace \
-    --wait
-
-  if helm show chart traefik/traefik-crds >/dev/null 2>&1; then
-    helm upgrade --install traefik-crds traefik/traefik-crds \
-      --namespace traefik-ingress \
-      --create-namespace \
-      --wait
-  else
-    echo "Traefik CRD chart was not found in the Helm repo. Install Traefik CRDs before syncing IngressRoute/Middleware resources."
-  fi
-}
-
-configure_aws() {
-  log "Configuring AWS credentials"
-  aws configure set aws_access_key_id "$AWS_ACCESS_KEY_ID"
-  aws configure set aws_secret_access_key "$AWS_SECRET_ACCESS_KEY"
-  aws configure set region "$AWS_REGION"
-}
-
-configure_kubernetes_secrets() {
-  log "Creating runtime secrets outside Git"
-  AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-  AWS_TOKEN="$(aws ecr get-login-password --region "$AWS_REGION")"
-  ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-  ECR_HELM_REPO="${ECR_REGISTRY}/nitroberry"
-
-  kubectl create namespace database-namespace --dry-run=client -o yaml | kubectl apply -f -
-  kubectl create namespace traefik-ingress --dry-run=client -o yaml | kubectl apply -f -
-  kubectl create namespace gatekeeper-system --dry-run=client -o yaml | kubectl apply -f -
-  kubectl create namespace metallb-system --dry-run=client -o yaml | kubectl apply -f -
-
-  kubectl create secret generic nitroberry-ecr-helm-repo \
-    --namespace argocd \
-    --from-literal=type=helm \
-    --from-literal=url="$ECR_HELM_REPO" \
-    --from-literal=enableOCI=true \
-    --from-literal=username=AWS \
-    --from-literal=password="$AWS_TOKEN" \
-    --dry-run=client -o yaml | kubectl apply -f -
-  kubectl label secret nitroberry-ecr-helm-repo \
-    --namespace argocd \
-    argocd.argoproj.io/secret-type=repository \
-    --overwrite >/dev/null
-
-  kubectl create secret generic postgres-credentials \
-    --namespace database-namespace \
-    --from-literal=postgres-user=postgres \
-    --from-literal=postgres-password="$POSTGRES_PASSWORD" \
-    --dry-run=client -o yaml | kubectl apply -f -
-
-  kubectl create secret generic aws-s3-backup-credentials \
-    --namespace database-namespace \
-    --from-literal=AWS_ACCESS_KEY_ID="$AWS_ACCESS_KEY_ID" \
-    --from-literal=AWS_SECRET_ACCESS_KEY="$AWS_SECRET_ACCESS_KEY" \
-    --from-literal=AWS_DEFAULT_REGION="$AWS_REGION" \
-    --from-literal=S3_BUCKET="$S3_BUCKET" \
-    --dry-run=client -o yaml | kubectl apply -f -
-}
-
-push_infra_charts() {
-  log "Packaging and pushing infrastructure Helm charts to ECR"
-  ./Helm/push-infra-charts.sh "$AWS_REGION"
-}
-
-apply_argocd_apps() {
-  log "Creating ArgoCD Applications for infrastructure Helm charts"
-  AWS_ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
-  ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
-  TMP_APPS="$(mktemp)"
-
-  sed "s/798701233691.dkr.ecr.ap-south-1.amazonaws.com/${ECR_REGISTRY}/g" argocd-apps.yaml > "$TMP_APPS"
-  kubectl apply -f "$TMP_APPS"
-  rm -f "$TMP_APPS"
-}
-
-echo "=========================================================="
-echo "    NitroBerry Production VM Setup & GitOps Bootstrap"
-echo "=========================================================="
-echo ""
-
-read -p "AWS Access Key ID: " AWS_ACCESS_KEY_ID
-read -s -p "AWS Secret Access Key: " AWS_SECRET_ACCESS_KEY
-echo ""
-read -p "AWS Region [${AWS_REGION_DEFAULT}]: " AWS_REGION
-AWS_REGION="${AWS_REGION:-$AWS_REGION_DEFAULT}"
-read -s -p "Postgres password for postgres-credentials: " POSTGRES_PASSWORD
-echo ""
-read -p "S3 backup bucket [nitroberry-db-backups]: " S3_BUCKET
-S3_BUCKET="${S3_BUCKET:-nitroberry-db-backups}"
-
-if [ -z "$POSTGRES_PASSWORD" ]; then
-  echo "Postgres password cannot be empty."
-  exit 1
+    # Untaint the control-plane node so workloads can run on this single-node cluster
+    echo "=> Untainting master node to allow pod scheduling..."
+    kubectl taint nodes --all node-role.kubernetes.io/control-plane- || true
+else
+    echo "Kubernetes is already installed."
 fi
 
-install_base_packages
-install_aws_cli
-install_helm
-configure_aws
-ensure_kubernetes_cluster
-clone_or_update_repo
-install_argocd
-install_external_controllers
-configure_kubernetes_secrets
-push_infra_charts
-apply_argocd_apps
+echo "=> Waiting for Kubernetes node to be ready..."
+sleep 10
+kubectl wait --for=condition=Ready nodes --all --timeout=600s
+
+# 3. Clone Repository
+echo "=> [3/7] Cloning NitroBerry Git repository..."
+if [ -d "NitroBerry-Platform" ]; then
+    rm -rf NitroBerry-Platform
+fi
+git clone "$GIT_REPO_URL"
+# Extract directory name from repo URL
+REPO_DIR=$(basename "$GIT_REPO_URL" .git)
+cd "$REPO_DIR"
+git checkout "$GIT_BRANCH" || true
+
+# 4. Install ArgoCD
+echo "=> [4/7] Installing ArgoCD..."
+kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
+kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml > /dev/null
+
+echo "=> Waiting for ArgoCD server to be ready (this may take a minute)..."
+kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
+
+# 5. ECR Login & ArgoCD Repo Configuration
+echo "=> [5/7] Configuring AWS ECR tokens and CronJob..."
+AWS_TOKEN=$(aws ecr get-login-password --region $AWS_REGION)
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+
+kubectl create secret generic ecr-regcred \
+  --docker-server=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com \
+  --docker-username=AWS \
+  --docker-password=$AWS_TOKEN \
+  -n argocd --dry-run=client -o yaml | kubectl apply -f -
+
+# Deploy the ecr-helper to keep tokens fresh forever
+kubectl apply -f Helm/charts/nitroberry/templates/ecr-helper.yaml
+
+# 6. Apply Core Infrastructure & Secrets
+echo "=> [6/7] Applying Core Infrastructure (MetalLB, Traefik, Postgres)..."
+kubectl apply -f "Legacy yaml/00-namespaces.yaml"
+
+# Install MetalLB explicitly (CRDs first, wait, then IP pool)
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/manifests/namespace.yaml
+kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/manifests/metallb.yaml
+kubectl wait --for=condition=Ready pods --all -n metallb-system --timeout=300s
+kubectl apply -f "Legacy yaml/01-metallb.yaml"
+
+# Core services
+kubectl apply -f "Legacy yaml/02-postgres.yaml"
+kubectl apply -f "Legacy yaml/03-traefik-rbac.yaml"
+kubectl apply -f "Legacy yaml/04-traefik-install.yaml"
+kubectl apply -f "Legacy yaml/05-traefik-middlewares.yaml"
+
+echo "=> Applying Initial Secrets (ensure 'Legacy yaml/12-secrets.yaml' has real passwords before production!)"
+kubectl apply -f "Legacy yaml/12-secrets.yaml"
+
+# 7. Start GitOps deployment via ArgoCD
+echo "=> [7/7] Applying ArgoCD Apps (Triggering GitOps deployment)..."
+
+# Dynamically update the ECR URL in argocd-apps.yaml to match the current AWS Account and Region
+sed -i "s/798701233691.dkr.ecr.ap-south-1.amazonaws.com/${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/g" argocd-apps.yaml
+
+kubectl apply -f argocd-apps.yaml
 
 echo ""
 echo "=========================================================="
