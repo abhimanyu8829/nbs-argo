@@ -1,0 +1,30 @@
+{{- range $name, $app := .Values.applications }}
+{{- $targetRevision := required (printf "chartTags.%s is required" $name) (index $.Values.chartTags $name) }}
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: {{ $name | quote }}
+  namespace: {{ $.Values.global.argocdNamespace | quote }}
+  annotations:
+    argocd.argoproj.io/sync-wave: {{ $app.syncWave | quote }}
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: {{ $.Values.global.ecrRepoUrl | quote }}
+    chart: {{ $app.chart | quote }}
+    targetRevision: {{ $targetRevision | quote }}
+  destination:
+    server: {{ $.Values.global.destinationServer | quote }}
+    namespace: {{ $app.namespace | quote }}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+{{- range $option := $app.syncOptions }}
+      - {{ $option }}
+{{- end }}
+---
+{{- end }}

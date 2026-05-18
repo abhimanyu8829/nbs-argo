@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ecr-helper
+  namespace: argocd
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: ecr-helper-role
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    verbs: ["get", "create", "patch", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: ecr-helper-binding
+subjects:
+  - kind: ServiceAccount
+    name: ecr-helper
+    namespace: argocd
+roleRef:
+  kind: ClusterRole
+  name: ecr-helper-role
+  apiGroup: rbac.authorization.k8s.io
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: ecr-token-refresher
+  namespace: argocd
+spec:
+  schedule: "0 */6 * * *"
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 1
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: ecr-helper
+          restartPolicy: Never
+          containers:
+            - name: ecr-token-refresher
+              image: odaniait/aws-kubectl:latest
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: AWS_DEFAULT_REGION
+                  value: "ap-south-1"
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+                  ECR_TOKEN=$(aws ecr get-login-password --region ${AWS_DEFAULT_REGION})
+                  for ns in argocd database-namespace default auth-namespace cockpit-namespace messenger-namespace social-namespace task-namespace vault-namespace workflow-namespace; do
+                    # Check if namespace exists, if not, create it
+                    kubectl get namespace $ns >/dev/null 2>&1 || kubectl create namespace $ns
+                    kubectl delete secret ecr-regcred -n $ns --ignore-not-found
+                    kubectl create secret generic ecr-regcred \
+                      --docker-server=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com \
+                      --docker-username=AWS \
+                      --docker-password=${ECR_TOKEN} \
+                      -n $ns
+                  done
+              volumeMounts:
+                - name: aws-creds
+                  mountPath: /root/.aws
+                  readOnly: true
+          volumes:
+            - name: aws-creds
+              hostPath:
+                path: /root/.aws

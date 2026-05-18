@@ -1,0 +1,30 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: nitroberry-platform-apps
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/dushyantajangid/NitroBerry-Platform.git
+    targetRevision: argocdTest
+    path: helm/argocd-apps
+    helm:
+      valueFiles:
+        - values.yaml
+        - chart-tags.yaml
+      parameters:
+        - name: global.ecrRepoUrl
+          value: 798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
