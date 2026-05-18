@@ -81,84 +81,84 @@ applications:
   auth-worker:
     chart: auth-worker-helm
     namespace: auth-namespace
-    syncWave: "11"
+    syncWave: "20"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
   cockpit-api:
     chart: cockpit-api-helm
     namespace: cockpit-namespace
-    syncWave: "10"
+    syncWave: "12"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
   cockpit-worker:
     chart: cockpit-worker-helm
     namespace: cockpit-namespace
-    syncWave: "11"
+    syncWave: "22"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
   messenger-api:
     chart: messenger-api-helm
     namespace: messenger-namespace
-    syncWave: "10"
+    syncWave: "15"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
   social-api:
     chart: social-api-helm
     namespace: social-namespace
-    syncWave: "10"
+    syncWave: "13"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
   social-worker:
     chart: social-worker-helm
     namespace: social-namespace
-    syncWave: "11"
+    syncWave: "23"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
   task-api:
     chart: task-api-helm
     namespace: task-namespace
-    syncWave: "10"
+    syncWave: "14"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
   task-worker:
     chart: task-worker-helm
     namespace: task-namespace
-    syncWave: "11"
+    syncWave: "24"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
   vault-api:
     chart: vault-api-helm
     namespace: vault-namespace
-    syncWave: "10"
+    syncWave: "11"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
   vault-worker:
     chart: vault-worker-helm
     namespace: vault-namespace
-    syncWave: "11"
+    syncWave: "21"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
   workflow-api:
     chart: workflow-api-helm
     namespace: workflow-namespace
-    syncWave: "10"
+    syncWave: "16"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
   workflow-worker:
     chart: workflow-worker-helm
     namespace: workflow-namespace
-    syncWave: "11"
+    syncWave: "26"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true

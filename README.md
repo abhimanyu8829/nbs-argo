@@ -302,6 +302,32 @@ nitroberry/workflow-worker-helm
 
 No `messenger-worker-helm` app is configured because that repository was not present in the ECR list. Add it later only after the ECR Helm repository exists.
 
+Product sync waves are ordered for internal dependencies:
+
+```text
+10  auth-api          identity/authentication first
+11  vault-api         secure data service after auth
+12  cockpit-api       admin/control plane API after auth
+13  social-api        domain API after auth
+14  task-api          domain API after auth/social foundations
+15  messenger-api     messaging API after auth/social/task foundations
+16  workflow-api      orchestration API after core domain APIs
+20  auth-worker       workers start after all APIs begin syncing
+21  vault-worker
+22  cockpit-worker
+23  social-worker
+24  task-worker
+26  workflow-worker
+```
+
+If a real service dependency is different, change the `syncWave` value in:
+
+```text
+helm/argocd-apps/values.yaml
+```
+
+Lower waves sync earlier. Higher waves sync later.
+
 ### 2.6 Git Repo and Branch
 
 File:
