@@ -168,7 +168,7 @@ echo "=> [5/7] Configuring AWS ECR tokens and CronJob..."
 AWS_TOKEN=$(aws ecr get-login-password --region $AWS_REGION)
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 
-kubectl create secret generic ecr-regcred \
+kubectl create secret docker-registry ecr-regcred \
   --docker-server=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com \
   --docker-username=AWS \
   --docker-password=$AWS_TOKEN \

@@ -58,7 +58,7 @@ spec:
                     # Check if namespace exists, if not, create it
                     kubectl get namespace $ns >/dev/null 2>&1 || kubectl create namespace $ns
                     kubectl delete secret ecr-regcred -n $ns --ignore-not-found
-                    kubectl create secret generic ecr-regcred \
+                    kubectl create secret docker-registry ecr-regcred \
                       --docker-server=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com \
                       --docker-username=AWS \
                       --docker-password=${ECR_TOKEN} \

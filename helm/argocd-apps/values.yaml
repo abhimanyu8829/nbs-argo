@@ -78,6 +78,16 @@ applications:
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
+    helmValues:
+      replicaCount: 1
+      hpa:
+        enabled: false
+        minReplicas: 1
+      affinity:
+        podAntiAffinity:
+          enabled: false
+      topologySpreadConstraints:
+        enabled: false
   auth-worker:
     chart: auth-worker-helm
     namespace: auth-namespace
@@ -85,6 +95,16 @@ applications:
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
+    helmValues:
+      replicaCount: 1
+      hpa:
+        enabled: false
+        minReplicas: 1
+      affinity:
+        podAntiAffinity:
+          enabled: false
+      topologySpreadConstraints:
+        enabled: false
   cockpit-api:
     chart: cockpit-api-helm
     namespace: cockpit-namespace
@@ -92,6 +112,16 @@ applications:
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
+    helmValues:
+      replicaCount: 1
+      hpa:
+        enabled: false
+        minReplicas: 1
+      affinity:
+        podAntiAffinity:
+          enabled: false
+      topologySpreadConstraints:
+        enabled: false
   cockpit-worker:
     chart: cockpit-worker-helm
     namespace: cockpit-namespace
@@ -99,6 +129,16 @@ applications:
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
+    helmValues:
+      replicaCount: 1
+      hpa:
+        enabled: false
+        minReplicas: 1
+      affinity:
+        podAntiAffinity:
+          enabled: false
+      topologySpreadConstraints:
+        enabled: false
   messenger-api:
     chart: messenger-api-helm
     namespace: messenger-namespace
@@ -106,6 +146,16 @@ applications:
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
+    helmValues:
+      replicaCount: 1
+      hpa:
+        enabled: false
+        minReplicas: 1
+      affinity:
+        podAntiAffinity:
+          enabled: false
+      topologySpreadConstraints:
+        enabled: false
   social-api:
     chart: social-api-helm
     namespace: social-namespace
@@ -113,6 +163,16 @@ applications:
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
+    helmValues:
+      replicaCount: 1
+      hpa:
+        enabled: false
+        minReplicas: 1
+      affinity:
+        podAntiAffinity:
+          enabled: false
+      topologySpreadConstraints:
+        enabled: false
   social-worker:
     chart: social-worker-helm
     namespace: social-namespace
@@ -120,6 +180,16 @@ applications:
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
+    helmValues:
+      replicaCount: 1
+      hpa:
+        enabled: false
+        minReplicas: 1
+      affinity:
+        podAntiAffinity:
+          enabled: false
+      topologySpreadConstraints:
+        enabled: false
   task-api:
     chart: task-api-helm
     namespace: task-namespace
@@ -127,6 +197,16 @@ applications:
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
+    helmValues:
+      replicaCount: 1
+      hpa:
+        enabled: false
+        minReplicas: 1
+      affinity:
+        podAntiAffinity:
+          enabled: false
+      topologySpreadConstraints:
+        enabled: false
   task-worker:
     chart: task-worker-helm
     namespace: task-namespace
@@ -134,6 +214,16 @@ applications:
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
+    helmValues:
+      replicaCount: 1
+      hpa:
+        enabled: false
+        minReplicas: 1
+      affinity:
+        podAntiAffinity:
+          enabled: false
+      topologySpreadConstraints:
+        enabled: false
   vault-api:
     chart: vault-api-helm
     namespace: vault-namespace
@@ -141,6 +231,16 @@ applications:
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
+    helmValues:
+      replicaCount: 1
+      hpa:
+        enabled: false
+        minReplicas: 1
+      affinity:
+        podAntiAffinity:
+          enabled: false
+      topologySpreadConstraints:
+        enabled: false
   vault-worker:
     chart: vault-worker-helm
     namespace: vault-namespace
@@ -148,6 +248,16 @@ applications:
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
+    helmValues:
+      replicaCount: 1
+      hpa:
+        enabled: false
+        minReplicas: 1
+      affinity:
+        podAntiAffinity:
+          enabled: false
+      topologySpreadConstraints:
+        enabled: false
   workflow-api:
     chart: workflow-api-helm
     namespace: workflow-namespace
@@ -155,6 +265,16 @@ applications:
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
+    helmValues:
+      replicaCount: 1
+      hpa:
+        enabled: false
+        minReplicas: 1
+      affinity:
+        podAntiAffinity:
+          enabled: false
+      topologySpreadConstraints:
+        enabled: false
   workflow-worker:
     chart: workflow-worker-helm
     namespace: workflow-namespace
@@ -162,3 +282,13 @@ applications:
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
+    helmValues:
+      replicaCount: 1
+      hpa:
+        enabled: false
+        minReplicas: 1
+      affinity:
+        podAntiAffinity:
+          enabled: false
+      topologySpreadConstraints:
+        enabled: false

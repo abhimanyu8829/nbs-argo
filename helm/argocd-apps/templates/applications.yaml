@@ -15,6 +15,11 @@ spec:
     repoURL: {{ $.Values.global.ecrRepoUrl | quote }}
     chart: {{ $app.chart | quote }}
     targetRevision: {{ $targetRevision | quote }}
+    {{- if $app.helmValues }}
+    helm:
+      values: |
+{{ toYaml $app.helmValues | indent 8 }}
+    {{- end }}
   destination:
     server: {{ $.Values.global.destinationServer | quote }}
     namespace: {{ $app.namespace | quote }}
