@@ -41,8 +41,8 @@ This repository owns the **entire Kubernetes platform layer**. It handles:
 The deployment follows the **App-of-Apps** pattern orchestrated by ArgoCD.
 
 ```text
-argocd-apps.yaml (Root Application)
-  └── helm/argocd-apps/ (Helm chart that generates child Applications)
+argocd/root-app.yaml (Root Application)
+  └── argocd/apps/ (Helm chart that generates child Applications)
         ├── metallb          (sync-wave 1)  ← Infrastructure deploys first
         ├── postgres         (sync-wave 2)
         ├── pgbouncer        (sync-wave 3)
@@ -127,15 +127,15 @@ git checkout argocdTest
 #### Step 1.4: Lint the Infrastructure Charts
 Validate that the Helm charts are syntactically correct before pushing:
 ```bash
-helm lint helm/helm/metallb helm/helm/postgres helm/helm/pgbouncer helm/helm/redis helm/helm/traefik helm/helm/opa-gatekeeper helm/argocd-apps
+helm lint helm/metallb helm/postgres helm/pgbouncer helm/redis helm/traefik helm/opa-gatekeeper argocd/apps
 ```
 *(Expected Output: `7 chart(s) linted, 0 chart(s) failed`)*
 
 #### Step 1.5: Push Infrastructure Charts to ECR
 Run the automated script to package and push the 6 infrastructure charts to your AWS account.
 ```bash
-chmod +x helm/push-infra-charts.sh
-./helm/push-infra-charts.sh ap-south-1
+chmod +x script/push-infra-charts.sh
+./script/push-infra-charts.sh ap-south-1
 ```
 *(This script logs into ECR, creates the repos if they don't exist, and uploads the `.tgz` packages).*
 
@@ -264,11 +264,11 @@ export GIT_BRANCH="argocdTest"
 ```
 
 #### Step 4.3: Execute the Master Setup Script
-This script does all the heavy lifting. It installs `kubeadm`, `kubelet`, `containerd`, creates the Kubernetes cluster, removes the master taint, installs ArgoCD, installs MetalLB, creates the ECR helper CronJob, and finally applies the root `argocd-apps.yaml` file to trigger the GitOps deployment.
+This script does all the heavy lifting. It installs `kubeadm`, `kubelet`, `containerd`, creates the Kubernetes cluster, removes the master taint, installs ArgoCD, installs MetalLB, creates the ECR helper CronJob, and finally applies the root `argocd/root-app.yaml` file to trigger the GitOps deployment.
 
 ```bash
-chmod +x setup-vm.sh
-./setup-vm.sh
+chmod +x script/installation/setup-vm.sh
+./script/installation/setup-vm.sh
 ```
 
 **Wait patiently.** This script takes approximately 5 to 10 minutes to execute. You will see logs scrolling by as it installs packages and pulls container images.
@@ -384,11 +384,11 @@ You will now see a grid of all your applications. They should all have a green h
 ### Updating a Microservice Version
 When developers release a new version of a microservice (e.g., they push `auth-api` v0.0.7 to ECR), you deploy it via GitOps:
 
-1. On your **local machine**, edit `helm/argocd-apps/chart-tags.yaml`.
+1. On your **local machine**, edit `argocd/apps/chart-tags.yaml`.
 2. Change the version string: `auth-api: "0.0.7"`
 3. Commit and push the change to GitHub:
    ```bash
-   git add helm/argocd-apps/chart-tags.yaml
+   git add argocd/apps/chart-tags.yaml
    git commit -m "chore: bump auth-api to v0.0.7"
    git push origin argocdTest
    ```
@@ -438,11 +438,11 @@ kubectl logs -n <namespace> <pod-name>
 # Check the probe failure events
 kubectl describe pod -n <namespace> <pod-name>
 ```
-*Note: `messenger-api` is a WebSocket server and does not have an `/api/health` REST endpoint. Its health probe is deliberately configured to hit `/socket.io/socket.io.js` in `helm/argocd-apps/values.yaml`.*
+*Note: `messenger-api` is a WebSocket server and does not have an `/api/health` REST endpoint. Its health probe is deliberately configured to hit `/socket.io/socket.io.js` in `argocd/apps/values.yaml`.*
 
 ### 4. MetalLB External IP is `<pending>`
 If Traefik isn't getting an IP address:
 ```bash
 kubectl get svc -n traefik-ingress traefik-service
 ```
-This means the IP pool defined in `helm/helm/metallb/values.yaml` is exhausted or misconfigured. Ensure the IP range in that file is valid and routable on your VM's local network subnets.
+This means the IP pool defined in `helm/metallb/values.yaml` is exhausted or misconfigured. Ensure the IP range in that file is valid and routable on your VM's local network subnets.

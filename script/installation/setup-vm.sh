@@ -49,17 +49,6 @@ install_helm() {
   curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 }
 
-install_gatekeeper() {
-  if kubectl get deployment gatekeeper-controller-manager -n gatekeeper-system >/dev/null 2>&1; then
-    echo "Gatekeeper already installed."
-    return
-  fi
-
-  log "Installing OPA Gatekeeper controller"
-  kubectl apply -f https://raw.githubusercontent.com/open-policy-agent/gatekeeper/v3.14.0/deploy/gatekeeper.yaml
-  kubectl wait --for=condition=available deployment/gatekeeper-controller-manager -n gatekeeper-system --timeout=300s
-}
-
 install_kubernetes_packages() {
   if command_exists kubeadm && command_exists kubelet && command_exists kubectl; then
     echo "Kubernetes packages already installed."
@@ -174,8 +163,8 @@ kubectl create secret docker-registry ecr-regcred \
   --docker-password=$AWS_TOKEN \
   -n argocd --dry-run=client -o yaml | kubectl apply -f -
 
-# Deploy the ecr-helper to keep tokens fresh forever
-kubectl apply -f helm/ecr-helper.yaml
+# Deploy the ECR helper to keep tokens fresh.
+kubectl apply -f ./script/installation/ecr-helper.yaml
 
 # 6. Apply Core Infrastructure & Secrets
 echo "=> [6/7] Applying Core Infrastructure (MetalLB and pre-provisioning secrets)..."
@@ -195,15 +184,14 @@ kubectl apply -f https://raw.githubusercontent.com/metallb/metallb/v0.13.10/conf
 echo "=> Waiting for MetalLB operator to be ready..."
 kubectl wait --for=condition=Ready pods --all -n metallb-system --timeout=300s
 
-install_gatekeeper
 
 # 7. Start GitOps deployment via ArgoCD
 echo "=> [7/7] Applying ArgoCD Apps (Triggering GitOps deployment)..."
 
-# Dynamically update the ECR URL in argocd-apps.yaml to match the current AWS Account and Region
-sed -i "s/798701233691.dkr.ecr.ap-south-1.amazonaws.com/${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/g" argocd-apps.yaml
+# Dynamically update the ECR URL in the root ArgoCD app to match the current AWS account and region.
+sed -i "s/798701233691.dkr.ecr.ap-south-1.amazonaws.com/${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/g" ./argocd/root-app.yaml
 
-kubectl apply -f argocd-apps.yaml
+kubectl apply -f ./argocd/root-app.yaml
 
 echo ""
 echo "=========================================================="
