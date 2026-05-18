@@ -88,6 +88,11 @@ applications:
           enabled: false
       topologySpreadConstraints:
         enabled: false
+      probes:
+        readiness:
+          path: /api/health
+        liveness:
+          path: /api/health
   auth-worker:
     chart: auth-worker-helm
     namespace: auth-namespace
@@ -122,6 +127,11 @@ applications:
           enabled: false
       topologySpreadConstraints:
         enabled: false
+      probes:
+        readiness:
+          path: /api/health
+        liveness:
+          path: /api/health
   cockpit-worker:
     chart: cockpit-worker-helm
     namespace: cockpit-namespace
@@ -156,6 +166,11 @@ applications:
           enabled: false
       topologySpreadConstraints:
         enabled: false
+      probes:
+        readiness:
+          path: /api/health
+        liveness:
+          path: /api/health
   social-api:
     chart: social-api-helm
     namespace: social-namespace
@@ -173,6 +188,11 @@ applications:
           enabled: false
       topologySpreadConstraints:
         enabled: false
+      probes:
+        readiness:
+          path: /api/health
+        liveness:
+          path: /api/health
   social-worker:
     chart: social-worker-helm
     namespace: social-namespace
@@ -207,6 +227,11 @@ applications:
           enabled: false
       topologySpreadConstraints:
         enabled: false
+      probes:
+        readiness:
+          path: /api/health
+        liveness:
+          path: /api/health
   task-worker:
     chart: task-worker-helm
     namespace: task-namespace
@@ -241,6 +266,11 @@ applications:
           enabled: false
       topologySpreadConstraints:
         enabled: false
+      probes:
+        readiness:
+          path: /api/health
+        liveness:
+          path: /api/health
   vault-worker:
     chart: vault-worker-helm
     namespace: vault-namespace
@@ -275,6 +305,11 @@ applications:
           enabled: false
       topologySpreadConstraints:
         enabled: false
+      probes:
+        readiness:
+          path: /api/health
+        liveness:
+          path: /api/health
   workflow-worker:
     chart: workflow-worker-helm
     namespace: workflow-namespace
