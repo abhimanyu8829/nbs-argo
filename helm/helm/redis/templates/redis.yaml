@@ -1,0 +1,110 @@
+{{- if .Values.redis.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: database-namespace
+  labels:
+    app: redis
+    managed-by: nitroberry
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+        managed-by: nitroberry
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 999
+        fsGroup: 999
+      containers:
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: IfNotPresent
+          args:
+            - redis-server
+            - --save
+            - ""
+            - --appendonly
+            - "no"
+            - --dir
+            - /data
+          ports:
+            - name: redis
+              containerPort: 6379
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+      volumes:
+        - name: redis-data
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: database-namespace
+  labels:
+    app: redis
+    managed-by: nitroberry
+spec:
+  selector:
+    app: redis
+  ports:
+    - name: redis
+      protocol: TCP
+      port: 6379
+      targetPort: redis
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: redis-network-policy
+  namespace: database-namespace
+  labels:
+    managed-by: nitroberry
+spec:
+  podSelector:
+    matchLabels:
+      app: redis
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: auth-namespace
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: cockpit-namespace
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: messenger-namespace
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: social-namespace
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: task-namespace
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: vault-namespace
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: workflow-namespace
+      ports:
+        - protocol: TCP
+          port: 6379
+{{- end }}
