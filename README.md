@@ -825,5 +825,4 @@ kubectl exec -n <namespace> <pod-name> -- curl http://localhost:8080/api/health
 
 6. **Keep Kubernetes and ArgoCD updated.** Regularly update both components for security patches and bug fixes.
 
-7. **Document all custom configurations.** Keep runbooks for common operational tasks.
-
+7. **Document all custom configurations.** Keep runbooks for common operational tasks
