@@ -1,24 +1,93 @@
-# NitroBerry Platform Infrastructure: The Ultimate Production Deployment Guide
+# NitroBerry Platform Infrastructure: Production & Local Testing Guide
 
 > **GitOps-driven Kubernetes platform for the NitroBerry microservices ecosystem.**
 > This repository contains the complete infrastructure code to bootstrap a bare-metal/VM Kubernetes cluster, configure ArgoCD, and deploy the entire NitroBerry microservices suite (13 APIs and Workers) via AWS ECR OCI Helm charts.
+
+**🎯 Supports two deployment modes:**
+- **Production:** Cloud VM (AWS EC2, DigitalOcean, etc.) with full AWS ECR integration
+- **Local Testing:** WSL Ubuntu with dummy credentials for development
 
 ---
 
 ## Table of Contents
 
+- [Quick Reference: Production vs Local Testing](#quick-reference-production-vs-local-testing)
+- [Repository Structure & File Organization](#repository-structure--file-organization)
 - [Overview](#overview)
 - [Architecture](#architecture)
 - [Microservices Map](#microservices-map)
-- [The Ultimate Step-by-Step Production Deployment Guide](#the-ultimate-step-by-step-production-deployment-guide)
-  - [Phase 1: Local Machine Preparation (AWS & ECR)](#phase-1-local-machine-preparation-aws--ecr)
-  - [Phase 2: Procuring and Connecting to the VM](#phase-2-procuring-and-connecting-to-the-vm)
-  - [Phase 3: VM Initialization & AWS Configuration](#phase-3-vm-initialization--aws-configuration)
-  - [Phase 4: Cloning the Repository & Running the Setup Script](#phase-4-cloning-the-repository--running-the-setup-script)
-  - [Phase 5: Exhaustive Verification](#phase-5-exhaustive-verification)
-  - [Phase 6: Accessing the ArgoCD Dashboard](#phase-6-accessing-the-argocd-dashboard)
+- [Production Deployment Guide](#production-deployment-guide)
+- [Local Testing Deployment Guide (WSL/Docker)](#local-testing-deployment-guide-wsldocker)
+- [Accessing Services](#accessing-services)
 - [Day-2 Operations](#day-2-operations)
 - [Troubleshooting](#troubleshooting)
+
+---
+
+## Quick Reference: Production vs Local Testing
+
+| Aspect | **Production (Cloud VM)** | **Local Testing (WSL)** |
+|--------|--------------------------|------------------------|
+| **Environment** | AWS EC2 / DigitalOcean VM | WSL Ubuntu with Docker |
+| **Kubernetes** | kubeadm single-node cluster | kubeadm single-node cluster |
+| **Setup Script** | `script/installation/setup-vm.sh` | `script/deploy-wsl-local.sh` |
+| **Deployment Script** | `script/deploy-production.sh` | (Built into setup-wsl-local.sh) |
+| **AWS ECR** | Required ✅ Real credentials | Skipped ❌ Uses dummy creds |
+| **Git Clone** | Auto git pull from GitHub | Manual - already on disk |
+| **Time to Deploy** | 15-30 minutes | 5-10 minutes |
+| **Pods Deployed** | 19 NitroBerry + system | 19 NitroBerry + system |
+| **Use Case** | Production workloads, real traffic | Development, testing, CI/CD validation |
+| **Persistence** | Real volumes, persistent data | EmptyDir volumes, ephemeral |
+
+---
+
+## Repository Structure & File Organization
+
+```
+NitroBerry-Platform/
+├── 📋 README.md                           [USEFUL] Main deployment guide (YOU ARE HERE)
+├── 📋 DEPLOYMENT_SUMMARY.md              [USEFUL] Status of deployed pods & access info
+├── 📋 ACCESS_ARGOCD.sh                   [USEFUL-LOCAL] Script to display ArgoCD credentials
+│
+├── 🔧 script/                            [CORE DEPLOYMENT SCRIPTS]
+│   ├── deploy-production.sh               [USEFUL-PROD] Phase 2: Production verification & sync
+│   ├── push-infra-charts.sh               [USEFUL-PROD] Pushes Helm charts to ECR
+│   ├── deploy-wsl-local.sh                [USEFUL-LOCAL] ✨ NEW: Local testing deployment
+│   ├── port-forward.sh                    [USEFUL-LOCAL] Setup port forwarding for services
+│   ├── test-deployment.sh                 [USEFUL-LOCAL] Verify deployed pods & logs
+│   └── installation/
+│       ├── setup-vm.sh                    [USEFUL-PROD] Phase 1: Master bootstrap script
+│       └── ecr-helper.yaml                [USEFUL-PROD] CronJob for ECR token refresh
+│
+├── 🐳 helm/                              [INFRASTRUCTURE HELM CHARTS]
+│   ├── metallb/
+│   │   ├── Chart.yaml                    [USEFUL] Helm chart metadata
+│   │   ├── values.yaml                   [USEFUL] Configuration (IP pool, etc)
+│   │   └── templates/                    [USEFUL] Kubernetes manifests
+│   ├── postgres/                         [USEFUL] PostgreSQL StatefulSet
+│   ├── redis/                            [USEFUL] Redis Deployment  
+│   ├── pgbouncer/                        [USEFUL] Connection pooler Deployment
+│   ├── traefik/                          [USEFUL] Ingress controller Deployment
+│   └── opa-gatekeeper/                   [USEFUL] Policy enforcement controller
+│
+├── 🔄 argocd/                            [GITOPS ORCHESTRATION]
+│   ├── root-app.yaml                     [USEFUL] ✨ MAIN: Entry point for ArgoCD sync
+│   └── apps/
+│       ├── Chart.yaml                    [USEFUL] App-of-Apps generator chart
+│       ├── values.yaml                   [USEFUL] ⭐ CRITICAL: All microservice configs
+│       ├── chart-tags.yaml               [USEFUL] Docker image tags for all services
+│       └── templates/
+│           └── applications.yaml         [USEFUL] Generates child applications
+│
+├── 📄 reviewcomments.md                  [NOT USEFUL] Old review feedback (archived)
+└── .gitignore                            [USEFUL] Git ignore rules
+```
+
+### **Legend**
+- ✅ **USEFUL** - Critical for production/testing
+- ✅ **USEFUL-PROD** - Required only for production deployment
+- ✅ **USEFUL-LOCAL** - Required only for local testing
+- ❌ **NOT USEFUL** - Can be ignored / archived
 
 ---
 
@@ -31,8 +100,8 @@ This repository owns the **entire Kubernetes platform layer**. It handles:
 3. **Networking**: MetalLB (for LoadBalancer IPs) and Traefik (Ingress + TLS).
 4. **Data Layer**: PostgreSQL, PgBouncer (connection pooling), and Redis.
 5. **Security**: OPA Gatekeeper policies.
-6. **ECR Automation**: CronJob to automatically refresh AWS ECR tokens.
-7. **Microservices Orchestration**: Automated deployment of 7 microservice domains.
+6. **ECR Automation**: CronJob to automatically refresh AWS ECR tokens (prod only).
+7. **Microservices Orchestration**: Automated deployment of 7 microservice domains = **19 total pods**.
 
 ---
 
@@ -86,11 +155,13 @@ argocd/root-app.yaml (Root Application)
 
 ---
 
-## The Ultimate Step-by-Step Production Deployment Guide
+## Production Deployment Guide
 
-**Follow this guide meticulously. Do not skip any steps. This guide takes you from an empty local machine all the way to a fully functioning Kubernetes production cluster.**
+**🎯 Target:** Cloud VM (AWS EC2, DigitalOcean, etc.) with AWS ECR integration
 
-### Phase 1: Local Machine Preparation (AWS & ECR)
+Follow this guide meticulously for production environments. This takes you from an empty cloud VM to a fully functioning Kubernetes production cluster with all 19 NitroBerry pods.
+
+### Phase 1️⃣: Local Machine Preparation (AWS & ECR)
 
 Before touching any production servers, you must prepare your AWS environment and push the foundational infrastructure charts to Elastic Container Registry (ECR). Perform these steps on your **personal computer / local machine**.
 
@@ -143,7 +214,7 @@ chmod +x script/push-infra-charts.sh
 
 ---
 
-### Phase 2: Procuring and Connecting to the VM
+### Phase 2️⃣: Procuring and Connecting to the VM
 
 #### Step 2.1: Provision the Virtual Machine
 Go to your cloud provider (AWS EC2, DigitalOcean, Azure, etc.) and launch a Virtual Machine with the following specifications:
@@ -182,7 +253,7 @@ You should now see the `ubuntu@...:~$` prompt. You are inside the production ser
 
 ---
 
-### Phase 3: VM Initialization & Security Configuration
+### Phase 3️⃣: VM Initialization & Security Configuration
 
 > [!IMPORTANT]
 > Execute all commands in this phase **directly on the Ubuntu VM terminal**. Ensure you have sudo privileges.
@@ -241,7 +312,7 @@ sudo aws sts get-caller-identity
 
 ---
 
-### Phase 4: Automated Architecture Bootstrap
+### Phase 4️⃣: Automated Architecture Bootstrap
 
 With the VM primed, we will now execute the centralized bootstrap script. This script dynamically installs Kubernetes, provisions the cluster, sets up the GitOps engine (ArgoCD), and triggers the App-of-Apps deployment.
 
@@ -325,7 +396,7 @@ kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.pas
 
 ---
 
-### Phase 5: Exhaustive Verification
+### Phase 5️⃣: Exhaustive Verification
 
 ArgoCD is now running in the background, pulling all 19 Helm charts from AWS ECR and deploying them to Kubernetes. `scripts/deploy-production.sh` performs these checks automatically, but you can run them manually when investigating a server.
 
@@ -386,7 +457,7 @@ kubectl get constraints
 
 ---
 
-### Phase 6: Accessing the ArgoCD Dashboard
+### Phase 6️⃣: Accessing the ArgoCD Dashboard
 
 ArgoCD provides a beautiful UI to visualize your entire microservices architecture. Since this is a production cluster, the ArgoCD server is not exposed to the public internet by default. You will use port-forwarding to access it securely.
 
@@ -413,7 +484,209 @@ You will now see a grid of all your applications. They should all have a green h
 
 ---
 
-## Day-2 Operations
+## Local Testing Deployment Guide (WSL/Docker)
+
+**🎯 Target:** WSL Ubuntu with kubeadm Kubernetes (no AWS ECR needed)
+
+This guide is optimized for rapid local testing, CI/CD validation, and development environments. Deploy the exact same 19 NitroBerry pods as production, but with dummy credentials.
+
+### Prerequisites for Local Testing
+
+- **Windows 11+** with WSL enabled (`wsl -d Ubuntu`)
+- **Docker Desktop installed** or Docker running on WSL
+- **Kubernetes not yet bootstrapped** on WSL (the script handles this)
+- **~30GB free disk space** on WSL Ubuntu
+- **At least 8GB RAM** allocated to WSL
+
+### Phase 1️⃣: Local Machine Setup
+
+#### Step 1.1: SSH into WSL Ubuntu
+```bash
+wsl -d Ubuntu bash
+# You are now inside: abhimanyu@abhimanyu:~$
+```
+
+#### Step 1.2: Navigate to the Repository
+The code should already be present on your mounted drive:
+```bash
+cd /mnt/c/Users/DELL-OS/OneDrive/Desktop/argocd-nbs/NitroBerry-Platform/NitroBerry-Platform
+ls -la script/
+```
+
+Expected files:
+```
+deploy-wsl-local.sh    ✅ Main deployment script for local testing
+port-forward.sh        ✅ Setup port forwarding for services  
+test-deployment.sh     ✅ Verify deployed pods
+ACCESS_ARGOCD.sh       ✅ Display ArgoCD credentials
+```
+
+### Phase 2️⃣: Execute Local Deployment
+
+#### Step 2.1: Run the WSL Deployment Script
+```bash
+chmod +x script/deploy-wsl-local.sh
+sudo script/deploy-wsl-local.sh
+```
+
+**What this script does:**
+```
+[1/6] Installing base packages (curl, git, jq, etc)
+[2/6] Installing Helm 3
+[3/6] Setting up Kubernetes cluster (kubeadm + Calico CNI)
+[4/6] Installing ArgoCD
+[5/6] Applying Core Infrastructure (MetalLB, local storage, postgres secrets)
+[6/6] Applying ArgoCD Application (triggers GitOps deployment)
+```
+
+**⏱️ Estimated time:** 10-15 minutes
+
+**Expected output at completion:**
+```
+=========================================================
+NitroBerry GitOps bootstrap COMPLETE!
+=========================================================
+✓ Kubernetes cluster ready
+✓ ArgoCD installed
+✓ Core infrastructure deployed
+✓ All 19 pods will be deployed via ArgoCD
+=========================================================
+```
+
+#### Step 2.2: Verify Pods Are Deploying
+In a **new WSL terminal** (don't stop the first one), watch the pods:
+```bash
+wsl -d Ubuntu bash -c "watch -n 2 'kubectl get pods -A | grep -E auth|cockpit|postgres|redis|traefik'"
+```
+
+Expected output (after 5-10 minutes):
+```
+NAMESPACE             NAME                      READY   STATUS    RESTARTS   AGE
+database-namespace    postgres-0                1/1     Running   0          5m
+database-namespace    redis-bc674b8bb-ztbs5     1/1     Running   0          5m
+database-namespace    pgbouncer-66d48c8b4-2q4kx 1/1     Running   0          5m
+traefik-ingress       traefik-7d68c6bbdd-pjxrf  1/1     Running   0          5m
+auth-namespace        auth-api-689d9c4bd8-5mmqc 0/1     Running   5          3m
+auth-namespace        auth-worker-86dc857866-f5z7k 1/1  Running   0          3m
+```
+
+### Phase 3️⃣: Access Services
+
+#### Step 3.1: Set Up Port Forwarding
+```bash
+cd /mnt/c/Users/DELL-OS/OneDrive/Desktop/argocd-nbs/NitroBerry-Platform/NitroBerry-Platform
+bash script/port-forward.sh
+```
+
+This sets up forwarding for:
+- **Traefik:** localhost:8081
+- **PostgreSQL:** localhost:5432
+- **Redis:** localhost:6379
+- **PgBouncer:** localhost:6432
+- **ArgoCD:** localhost:8080
+
+#### Step 3.2: Test Services with curl (from PowerShell on Windows)
+```powershell
+# Test Traefik Ingress
+curl http://localhost:8081/
+# Expected: HTTP 404 (not found - service is UP ✅)
+
+# Check all pods
+wsl -d Ubuntu kubectl get pods -A
+
+# View ArgoCD password
+wsl -d Ubuntu bash -c "kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d"
+```
+
+#### Step 3.3: Access ArgoCD UI
+1. Open browser: `https://localhost:8080/`
+2. Click **"Advanced"** on security warning
+3. Click **"Proceed to localhost:8080"**
+4. **Login:**
+   - Username: `admin`
+   - Password: (from previous command)
+
+You should see all 19 NitroBerry pods synced in green ✅
+
+### Phase 4️⃣: Verify Deployment Status
+
+#### Step 4.1: Run Comprehensive Test
+```bash
+bash /mnt/c/Users/DELL-OS/OneDrive/Desktop/argocd-nbs/NitroBerry-Platform/NitroBerry-Platform/script/test-deployment.sh
+```
+
+#### Step 4.2: Check Pod Logs
+```bash
+# PostgreSQL logs
+wsl -d Ubuntu kubectl logs postgres-0 -n database-namespace --tail=10
+
+# Traefik logs
+wsl -d Ubuntu kubectl logs -l app=traefik -n traefik-ingress --tail=10
+
+# Auth API logs
+wsl -d Ubuntu kubectl logs -l app=auth-api -n auth-namespace --tail=10
+```
+
+#### Step 4.3: Get All Running Pods Count
+```bash
+wsl -d Ubuntu bash -c "kubectl get pods -A --no-headers | wc -l"
+# Should output: ~42 (19 NitroBerry + 23 system pods)
+```
+
+### Cleaning Up Local Testing Environment
+
+**To stop everything:**
+```bash
+# Delete all namespaces (everything gets cleaned up)
+wsl -d Ubuntu kubectl delete namespace argocd auth-namespace cockpit-namespace \
+  database-namespace messenger-namespace social-namespace task-namespace \
+  traefik-ingress vault-namespace workflow-namespace
+
+# To destroy the entire cluster
+wsl -d Ubuntu bash -c "sudo kubeadm reset -f && sudo rm -rf /etc/kubernetes /var/lib/kubelet"
+```
+
+---
+
+## Accessing Services
+
+### 🌐 Service URLs
+
+| Service | URL | Port | Prod | Local |
+|---------|-----|------|------|-------|
+| Traefik Ingress | `http://localhost:8081` | 8081 | ❌ Use LB IP | ✅ |
+| PostgreSQL | `localhost:5432` | 5432 | ❌ Internal | ✅ |
+| Redis | `localhost:6379` | 6379 | ❌ Internal | ✅ |
+| PgBouncer | `localhost:6432` | 6432 | ❌ Internal | ✅ |
+| ArgoCD UI | `https://localhost:8080` | 8080 | ✅ With LB | ✅ |
+
+### 🔑 Default Credentials
+
+**Local Testing Credentials:**
+```
+PostgreSQL:
+  User: postgres
+  Password: nitroberry-local-pass
+  Host: localhost:5432
+
+ArgoCD:
+  Username: admin
+  Password: (auto-generated, view with ACCESS_ARGOCD.sh script)
+```
+
+**Production Credentials:**
+```
+PostgreSQL:
+  User: postgres
+  Password: (must be set via AWS Secrets Manager or similar)
+  Host: postgres-service.database-namespace.svc.cluster.local:5432
+
+ArgoCD:
+  Username: admin
+  Password: (printed at end of setup-vm.sh)
+```
+
+---
 
 ### Updating a Microservice Version
 When developers release a new version of a microservice (e.g., they push `auth-api` v0.0.7 to ECR), you deploy it via GitOps:
