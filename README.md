@@ -182,54 +182,51 @@ You should now see the `ubuntu@...:~$` prompt. You are inside the production ser
 
 ---
 
-### Phase 3: VM Initialization & AWS Configuration
+### Phase 3: VM Initialization & Security Configuration
 
-Execute all of the following commands **directly on the Ubuntu VM**.
+> [!IMPORTANT]
+> Execute all commands in this phase **directly on the Ubuntu VM terminal**. Ensure you have sudo privileges.
 
-#### Step 3.1: Update the Operating System
-Ensure the server has the latest security patches and package lists.
+#### Step 3.1: System Updates & Dependencies
+Update the operating system to ensure you have the latest security patches, then install the required foundational utilities.
 ```bash
 sudo apt-get update -y
 sudo apt-get upgrade -y
-```
-
-#### Step 3.2: Install Utility Packages
-```bash
 sudo apt-get install -y curl unzip git jq apt-transport-https ca-certificates
 ```
 
-#### Step 3.3: Install the AWS CLI on the VM
-Kubernetes and ArgoCD will need the AWS CLI to authenticate with ECR.
+#### Step 3.2: Install AWS CLI v2
+The Kubernetes node and ArgoCD both require the AWS CLI to authenticate seamlessly with your private ECR registries.
 ```bash
 curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
 unzip -q awscliv2.zip
 sudo ./aws/install
 rm -rf aws awscliv2.zip
-```
-Verify installation:
-```bash
+
+# Verify installation
 aws --version
 ```
 
-#### Step 3.4: Configure AWS Credentials for the `ubuntu` User
-You must configure the exact same AWS credentials you used on your local machine.
+#### Step 3.3: Configure AWS Credentials (ubuntu user)
+Configure your AWS IAM credentials. These must be the same credentials used locally, possessing `AmazonEC2ContainerRegistryFullAccess`.
 ```bash
 aws configure
 ```
-* **AWS Access Key ID:** `AKIA...` (Enter your key)
-* **AWS Secret Access Key:** `wJalrXUtn...` (Enter your secret)
+* **AWS Access Key ID:** `AKIA...`
+* **AWS Secret Access Key:** `wJalrXUtn...`
 * **Default region name:** `ap-south-1`
 * **Default output format:** `json`
 
-Verify the configuration worked:
+Verify the configuration:
 ```bash
 aws sts get-caller-identity
 ```
 
-#### Step 3.5: Configure AWS Credentials for the `root` User
-**CRITICAL STEP:** Our automated ECR token refresher runs as a Kubernetes CronJob. It mounts the `/root/.aws` directory from the host to generate new Docker registry tokens every 6 hours. If `root` does not have AWS credentials, your cluster will eventually fail to pull images!
+#### Step 3.4: Replicate Credentials for Root (CRITICAL)
+> [!CAUTION]
+> The automated ECR token refresher (`ecr-helper`) runs as a Kubernetes CronJob. It mounts the `/root/.aws` directory to continuously generate valid Docker registry tokens. If the root user lacks these credentials, your cluster will permanently fail to pull new images.
 
-Copy the credentials you just configured to the root user's home directory:
+Replicate the credentials to the root environment:
 ```bash
 sudo mkdir -p /root/.aws
 sudo cp -r ~/.aws/* /root/.aws/
@@ -237,57 +234,52 @@ sudo chmod -R 600 /root/.aws/*
 sudo chown -R root:root /root/.aws/
 ```
 
-Verify that the `root` user can successfully authenticate:
+Verify root access:
 ```bash
 sudo aws sts get-caller-identity
 ```
-*(If this fails, do not proceed until it is fixed).*
 
 ---
 
-### Phase 4: Cloning the Repository & Running the Setup Script
+### Phase 4: Automated Architecture Bootstrap
+
+With the VM primed, we will now execute the centralized bootstrap script. This script dynamically installs Kubernetes, provisions the cluster, sets up the GitOps engine (ArgoCD), and triggers the App-of-Apps deployment.
 
 #### Step 4.1: Clone the Platform Repository
-Download the GitOps infrastructure code to the VM.
+Download the infrastructure code onto the VM.
 ```bash
 git clone https://github.com/dushyantajangid/NitroBerry-Platform.git
 cd NitroBerry-Platform
 git checkout argocdTest
 ```
 
-#### Step 4.2: Export Configuration Variables
-The setup script relies on these variables to know where to pull the GitOps configuration from.
+#### Step 4.2: Export Environment Variables
+The automated setup script relies on these environment variables to pull the correct GitOps configuration.
 ```bash
 export AWS_REGION="ap-south-1"
 export GIT_REPO_URL="https://github.com/dushyantajangid/NitroBerry-Platform.git"
 export GIT_BRANCH="argocdTest"
 ```
 
-#### Step 4.3: Execute the Master Setup Script
-This script does all the heavy lifting. It installs `kubeadm`, `kubelet`, `containerd`, creates the Kubernetes cluster, removes the master taint, installs ArgoCD, installs MetalLB, creates the ECR helper CronJob, and finally applies the root `argocd/root-app.yaml` file to trigger the GitOps deployment.
+#### Step 4.3: Execute the Master Bootstrap Sequence
+Launch the automated VM setup script. 
+> [!NOTE]
+> This script handles: Base OS configuration, `kubeadm` single-node initialization, Calico CNI setup, ArgoCD installation, MetalLB CRD installation, and the application of `argocd/root-app.yaml`.
 
 ```bash
 chmod +x script/installation/setup-vm.sh
 ./script/installation/setup-vm.sh
 ```
 
-**Wait patiently.** This script takes approximately 5 to 10 minutes to execute. You will see logs scrolling by as it installs packages and pulls container images.
+**Wait patiently.** The orchestration takes approximately 5–10 minutes. You will observe logs for package installations, container image pulls, and network configurations.
 
-#### Step 4.4: Save the ArgoCD Admin Password
-When the script completes, it will print a success banner. At the very bottom of this banner is your **ArgoCD Admin Password**.
+#### Step 4.4: Secure the ArgoCD Credentials
+Upon successful completion, the script will output a success banner. At the bottom of this banner is your **ArgoCD Admin Password**.
 
-```text
-==========================================================
-NitroBerry GitOps bootstrap complete.
-ArgoCD is now configured to pull infrastructure Helm charts from ECR.
-...
-ArgoCD admin password:
-zK9aXv... <--- THIS IS YOUR PASSWORD
-==========================================================
-```
-⚠️ **COPY THIS PASSWORD TO A SECURE LOCATION IMMEDIATELY.** ⚠️
+> [!WARNING]
+> Copy this password to a secure password manager immediately. You will need it to access the visual dashboard in Phase 6.
 
-*(If you lose it, you can retrieve it later with: `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d && echo`)*
+*(If lost, retrieve it via: `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d && echo`)*
 
 ---
 
