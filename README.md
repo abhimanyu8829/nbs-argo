@@ -261,31 +261,73 @@ export GIT_REPO_URL="https://github.com/dushyantajangid/NitroBerry-Platform.git"
 export GIT_BRANCH="argocdTest"
 ```
 
-#### Step 4.3: Execute the Master Bootstrap Sequence
-Launch the automated VM setup script. 
-> [!NOTE]
-> This script handles: Base OS configuration, `kubeadm` single-node initialization, Calico CNI setup, ArgoCD installation, MetalLB CRD installation, and the application of `argocd/root-app.yaml`.
+#### Step 4.3: Execute Phase 1 - Master Bootstrap Sequence
+Launch the automated VM setup script. This script handles initial cluster bootstrap.
 
 ```bash
 chmod +x script/installation/setup-vm.sh
 ./script/installation/setup-vm.sh
 ```
 
-**Wait patiently.** The orchestration takes approximately 5–10 minutes. You will observe logs for package installations, container image pulls, and network configurations.
+**⏱️ Wait patiently - this takes 5–15 minutes.** You will observe:
+- Base package installations (`kubeadm`, `kubectl`, `helm`, `containerd`)
+- Kubernetes cluster initialization with single-node control plane
+- Calico CNI plugin deployment
+- ArgoCD installation and initialization
+- MetalLB operator installation
+- ECR token creation in argocd namespace
+- Postgres credentials setup in database-namespace
+- ArgoCD root application triggered
 
-#### Step 4.4: Secure the ArgoCD Credentials
-Upon successful completion, the script will output a success banner. At the bottom of this banner is your **ArgoCD Admin Password**.
+Once it completes, **save the ArgoCD admin password** displayed at the end!
 
-> [!WARNING]
-> Copy this password to a secure password manager immediately. You will need it to access the visual dashboard in Phase 6.
+#### Step 4.4: Execute Phase 2 - Production Deployment Verification
+After `setup-vm.sh` completes, run the production deployment verification script. This ensures all production requirements are met:
 
-*(If lost, retrieve it via: `kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d && echo`)*
+```bash
+chmod +x script/deploy-production.sh
+./script/deploy-production.sh
+```
+
+**This script performs:**
+1. **Storage Provisioning** - Installs local-path StorageClass for persistent volumes
+2. **ECR Credential Distribution** - Creates ECR image pull secrets in ALL namespaces (not just argocd)
+3. **ArgoCD Repo Server Configuration** - Configures ArgoCD to pull OCI Helm charts from ECR
+4. **Application Refresh** - Forces ArgoCD to sync all applications
+5. **Pod Readiness Verification** - Waits for all pods to reach Ready state with health checks
+6. **Cluster Health Summary** - Reports final deployment status
+
+**Optional environment variable overrides:**
+```bash
+AWS_REGION=ap-south-1 AWS_ACCOUNT_ID=798701233691 WAIT_TIMEOUT=900s ./script/deploy-production.sh
+```
+
+**⏱️ This phase takes 3–10 minutes** depending on how many pods are deploying.
+
+#### Step 4.5: Verify Complete Deployment
+Once both scripts complete successfully, you will see the final summary. All pods should now be Running:
+
+```bash
+# Verify all pods are ready
+kubectl get pods -A
+
+# Check ArgoCD application sync status (all should be Synced & Healthy)
+kubectl get applications -n argocd -o wide
+
+# View ArgoCD admin password if needed
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d && echo
+```
+
+**Expected Result:**
+- ✅ All cluster nodes show `Ready`
+- ✅ All pods show `Running` with correct `READY` count
+- ✅ All ArgoCD applications show `Synced` and `Healthy`
 
 ---
 
 ### Phase 5: Exhaustive Verification
 
-ArgoCD is now running in the background, pulling all 19 Helm charts from AWS ECR and deploying them to Kubernetes. You must monitor this process to ensure everything stabilizes.
+ArgoCD is now running in the background, pulling all 19 Helm charts from AWS ECR and deploying them to Kubernetes. `scripts/deploy-production.sh` performs these checks automatically, but you can run them manually when investigating a server.
 
 #### Step 5.1: Verify Kubernetes Node Health
 ```bash
@@ -392,13 +434,39 @@ If you push a Git commit and don't want to wait 3 minutes for ArgoCD's polling c
 kubectl annotate application -n argocd nitroberry-platform-apps argocd.argoproj.io/refresh=hard --overwrite
 ```
 
-### Manually Refreshing ECR Credentials
-The `ecr-helper` CronJob handles this automatically every 6 hours. However, if you ever see `ImagePullBackOff` errors because of unauthorized ECR access, you can trigger a manual refresh immediately:
+### Re-running Production Deployment Verification
+If you encounter issues after initial deployment (ECR credential problems, pod failures, storage issues), you can safely re-run the production deployment script. It is idempotent and handles already-existing resources gracefully:
+
 ```bash
-kubectl create job --from=cronjob/ecr-token-refresher ecr-token-refresher-manual -n argocd
-# View the logs to ensure it worked
-kubectl logs -n argocd job/ecr-token-refresher-manual
+./script/deploy-production.sh
 ```
+
+This will:
+- Verify and repair storage provisioning
+- Update ECR credentials in all namespaces (useful if tokens expire)
+- Refresh ArgoCD applications
+- Wait for all pods to become Ready
+- Report final cluster health status
+
+**This is useful for:**
+- Recovering from ECR token expiration
+- Ensuring all namespaces have proper image pull secrets
+- Fixing lingering pod startup issues
+- Verifying production readiness after code updates
+
+### Updating the Kubernetes Cluster
+To upgrade the Kubernetes version (e.g., from v1.29 to v1.30):
+1. SSH into the VM
+2. Update the `K8S_VERSION` variable in `script/installation/setup-vm.sh`
+3. Re-run the setup script (it will skip already-installed components and only upgrade necessary ones)
+4. Verify the upgrade: `kubectl version --client && kubectl get nodes`
+
+### Scaling Applications
+To change the number of replicas for any microservice (e.g., scale auth-api to 3 replicas):
+1. Edit `argocd/apps/values.yaml` and find the service config
+2. Update the `replicaCount` field
+3. Commit and push to GitHub
+4. ArgoCD will automatically detect the change and perform a rolling update
 
 ---
 
@@ -406,35 +474,356 @@ kubectl logs -n argocd job/ecr-token-refresher-manual
 
 ### 1. Pods are stuck in `ImagePullBackOff` or `ErrImagePull`
 This means Kubernetes cannot authenticate with AWS ECR to pull the Docker image.
-* **Fix 1:** Run the manual ECR token refresh command (see Day-2 Operations).
-* **Fix 2:** Verify `/root/.aws/credentials` exists and is correct on the VM (`sudo cat /root/.aws/credentials`).
 
-### 2. ArgoCD Application shows `Unknown` Sync Status
-This usually means ArgoCD cannot read the Helm chart from ECR or cannot read the Git repository.
+**Quick Fix:** Re-run the production deployment script to refresh ECR credentials across all namespaces:
 ```bash
-# Check the specific error message
-kubectl describe application <app-name> -n argocd
-
-# Check the Repo Server logs for network/auth errors
-kubectl logs -n argocd deploy/argocd-repo-server --tail=100
+./script/deploy-production.sh
 ```
-* **Private Git Repo?** If your GitHub repo is private, you must add a Personal Access Token (PAT) to ArgoCD as a Repository Credential.
-* **Missing Chart?** Ensure the chart version listed in `chart-tags.yaml` actually exists in ECR! Check the AWS Console.
 
-### 3. API Pod is stuck in `CrashLoopBackOff`
-This happens if the application crashes on startup (e.g., missing database URL), or if the Kubernetes Health Probes are failing.
+**Manual Diagnosis:**
 ```bash
-# Check the application logs for stack traces
-kubectl logs -n <namespace> <pod-name>
+# See the specific error
+kubectl describe pod -n <namespace> <pod-name> | grep -A 5 Events
+```
 
-# Check the probe failure events
+**Other Solutions:**
+1. **Verify AWS credentials on the VM:**
+   ```bash
+   sudo cat /root/.aws/credentials
+   aws sts get-caller-identity  # Should show your AWS account
+   ```
+
+2. **Check if the chart actually exists in ECR:**
+   ```bash
+   aws ecr describe-repositories --region ap-south-1 | grep repositoryName
+   # Should list: nitroberry/auth-api-helm, nitroberry/postgres, etc.
+   ```
+
+3. **Manually trigger ECR token refresh:**
+   ```bash
+   kubectl create job --from=cronjob/ecr-token-refresher ecr-token-refresher-manual -n argocd
+   kubectl logs -f -n argocd job/ecr-token-refresher-manual
+   ```
+
+4. **Force pod restart to pull new images:**
+   ```bash
+   kubectl rollout restart deployment -n <namespace> <deployment-name>
+   ```
+
+---
+
+### 2. Kubernetes Cluster Not Ready (`NotReady` node status)
+The node is not healthy and cannot schedule pods.
+
+**Quick Fix:** Re-run the production deployment script which includes extended health checks:
+```bash
+./script/deploy-production.sh
+```
+
+**Diagnosis:**
+```bash
+kubectl get nodes
+# Shows: STATUS = NotReady
+
+kubectl describe node <node-name>
+# Look for: Conditions, KubeletNotReady, NetworkUnavailable
+```
+
+**Solutions:**
+1. **Check kubelet status on the VM:**
+   ```bash
+   systemctl status kubelet
+   journalctl -u kubelet -n 50  # Last 50 logs
+   ```
+
+2. **Restart kubelet:**
+   ```bash
+   sudo systemctl restart kubelet
+   sleep 10
+   kubectl get nodes  # Should now show Ready
+   ```
+
+3. **Check network plugin (Calico):**
+   ```bash
+   kubectl get pods -n kube-system | grep calico
+   # All calico pods should be Running
+   ```
+
+4. **If persistent, re-initialize the cluster:**
+   ```bash
+   sudo kubeadm reset -f
+   # Then re-run setup-vm.sh
+   ```
+
+---
+
+### 3. ArgoCD Application shows `Unknown` Sync Status
+ArgoCD cannot reach the Helm chart in ECR or the Git repository.
+
+**Diagnosis:**
+```bash
+# Get detailed error
+kubectl describe application <app-name> -n argocd | tail -20
+
+# Check repo-server logs
+kubectl logs -n argocd deploy/argocd-repo-server --tail=50 | grep -i error
+```
+
+**Solutions:**
+1. **Verify Git repository is accessible:**
+   ```bash
+   git ls-remote https://github.com/dushyantajangid/NitroBerry-Platform.git
+   ```
+
+2. **Check if the chart version exists in ECR:**
+   ```bash
+   aws ecr describe-images --repository-name nitroberry/postgres --region ap-south-1
+   ```
+
+3. **If it's a private repo, add GitHub credentials to ArgoCD:**
+   ```bash
+   kubectl create secret generic github-creds \
+     --from-literal=username=your-github-username \
+     --from-literal=password=your-github-pat \
+     -n argocd
+   ```
+
+4. **Force ArgoCD to refresh the app:**
+   ```bash
+   kubectl annotate application -n argocd nitroberry-platform-apps \
+     argocd.argoproj.io/refresh=hard --overwrite
+   ```
+
+---
+
+### 4. API Pod is stuck in `CrashLoopBackOff`
+The application is crashing on startup.
+
+**Diagnosis:**
+```bash
+# See crash logs
+kubectl logs -n <namespace> <pod-name>
+kubectl logs -n <namespace> <pod-name> --previous  # Previous run's logs
+
+# See pod events (restart reason)
 kubectl describe pod -n <namespace> <pod-name>
 ```
-*Note: `messenger-api` is a WebSocket server and does not have an `/api/health` REST endpoint. Its health probe is deliberately configured to hit `/socket.io/socket.io.js` in `argocd/apps/values.yaml`.*
 
-### 4. MetalLB External IP is `<pending>`
-If Traefik isn't getting an IP address:
+**Common Causes:**
+* **Missing environment variable:** Check if the Helm chart `values.yaml` is setting all required env vars.
+* **Database connection error:** Verify the pod can reach PostgreSQL: 
+  ```bash
+  kubectl exec -n <namespace> <pod-name> -- \
+    curl -s http://pgbouncer-service.database-namespace.svc.cluster.local:6432 -I
+  ```
+* **Health probe failing:** The liveness/readiness probe is too aggressive. Edit the Helm chart values.
+
+**Note:** `messenger-api` uses WebSocket (`/socket.io/socket.io.js`) instead of REST `/api/health` as its health probe. This is intentional.
+
+---
+
+### 5. MetalLB External IP is `<pending>`
+Traefik LoadBalancer service doesn't have an external IP.
+
+**Diagnosis:**
 ```bash
-kubectl get svc -n traefik-ingress traefik-service
+kubectl get svc -n traefik-ingress
+# Status shows: <pending> for EXTERNAL-IP
+
+# Check MetalLB logs
+kubectl logs -n metallb-system -l component=controller
 ```
-This means the IP pool defined in `helm/metallb/values.yaml` is exhausted or misconfigured. Ensure the IP range in that file is valid and routable on your VM's local network subnets.
+
+**Causes:**
+* IP pool is exhausted or not available
+* MetalLB speaker pods are not running
+* Incorrect CIDR in `helm/metallb/values.yaml`
+
+**Solutions:**
+1. **Verify MetalLB is running:**
+   ```bash
+   kubectl get pods -n metallb-system
+   # Should show: controller-XXX and speaker-XXX in Running state
+   ```
+
+2. **Check configured IP pool:**
+   ```bash
+   kubectl get ipaddresspools -A
+   ```
+
+3. **Update the IP pool if needed:**
+   Edit `helm/metallb/values.yaml`, change the `addresses` CIDR to an available range, then:
+   ```bash
+   kubectl delete application -n argocd metallb
+   git add helm/metallb/values.yaml
+   git commit -m "fix: update MetalLB IP pool"
+   git push origin argocdTest
+   ```
+
+---
+
+### 6. Storage is Full (`No space left on device`)
+The VM's disk is running out of space.
+
+**Quick Recovery:** Clean up and restart pods:
+```bash
+docker image prune -a --force
+sudo journalctl --vacuum-time=7d
+./script/deploy-production.sh  # Will restart deployments with fresh state
+```
+
+**Detailed Diagnosis:**
+```bash
+df -h  # Shows disk usage
+du -sh *  # Shows directory sizes
+docker system df  # Shows docker container/image sizes
+```
+
+**Solutions:**
+1. **Clean up container images:**
+   ```bash
+   docker image prune -a --force
+   docker container prune -f
+   ```
+
+2. **Clean up pod logs:**
+   ```bash
+   sudo journalctl --vacuum-time=7d
+   kubectl logs -f -n kube-system <pod-name> | grep -i error  # Find large logs
+   ```
+
+3. **Scale down and up to free space:**
+   ```bash
+   kubectl scale deployment -n <namespace> <name> --replicas=0
+   sleep 5
+   kubectl scale deployment -n <namespace> <name> --replicas=1
+   ```
+
+---
+
+### 7. `kubectl` commands hang or timeout
+Network connectivity or API server issues.
+
+**Diagnosis:**
+```bash
+# Check if API server is responsive
+kubectl version --client --server --short
+
+# Check kube-apiserver status
+kubectl get pods -n kube-system | grep apiserver
+```
+
+**Solutions:**
+1. **Restart the API server:**
+   ```bash
+   sudo systemctl restart kubelet
+   sleep 15
+   kubectl get nodes
+   ```
+
+2. **Check system load:**
+   ```bash
+   top  # Press 'q' to exit
+   free -h  # Check available memory
+   ```
+
+---
+
+### 8. Database Connection Issues
+Applications cannot connect to PostgreSQL or Redis.
+
+**Test PostgreSQL connectivity:**
+```bash
+kubectl exec -n database-namespace postgres-0 -- \
+  pg_isready -h postgres-service -p 5432 -U postgres
+# Output should be: postgres-service:5432 - accepting connections
+```
+
+**Test PgBouncer (connection pool):**
+```bash
+kubectl exec -n database-namespace postgres-0 -- \
+  pg_isready -h pgbouncer-service -p 6432 -U postgres
+# Output should be: pgbouncer-service:6432 - accepting connections
+```
+
+**Test Redis:**
+```bash
+kubectl exec -n database-namespace deploy/redis -- redis-cli ping
+# Output should be: PONG
+```
+
+**If connections fail:**
+1. Check pod status: `kubectl get pods -n database-namespace`
+2. Check pod logs: `kubectl logs -n database-namespace postgres-0`
+3. Restart the database: `kubectl delete pod -n database-namespace postgres-0`
+
+---
+
+## Quick Reference Commands
+
+### Monitor the Cluster
+```bash
+# Watch all pods in real-time
+kubectl get pods -A -w
+
+# Check all services and their IPs
+kubectl get svc -A
+
+# See resource usage by pod
+kubectl top pod -A
+
+# See system events
+kubectl get events -A --sort-by='.lastTimestamp'
+```
+
+### Inspect Applications
+```bash
+# See all ArgoCD applications and their status
+kubectl get applications -n argocd -o wide
+
+# Describe a specific app
+kubectl describe application <app-name> -n argocd
+
+# Manually sync an app
+kubectl patch application <app-name> -n argocd -p '{"status":{"operationState":null}}'
+```
+
+### Access Logs
+```bash
+# Stream real-time logs from a pod
+kubectl logs -f -n <namespace> <pod-name>
+
+# See logs from previous container (if it crashed)
+kubectl logs -n <namespace> <pod-name> --previous
+
+# Stream logs from all pods in a deployment
+kubectl logs -f -n <namespace> -l app=<app-name>
+```
+
+### Run Debug Commands Inside a Pod
+```bash
+# Open an interactive shell in a running pod
+kubectl exec -it -n <namespace> <pod-name> -- /bin/bash
+
+# Run a single command
+kubectl exec -n <namespace> <pod-name> -- curl http://localhost:8080/api/health
+```
+
+---
+
+## Production Best Practices
+
+1. **Always use GitOps for deployments.** Never use `kubectl apply` directly on production. Always commit changes to Git first, then let ArgoCD deploy them.
+
+2. **Monitor the cluster regularly.** Set up monitoring/alerting (Prometheus, Grafana) to track pod restarts, resource usage, and errors.
+
+3. **Keep secrets out of Git.** Sensitive data (API keys, passwords) should be stored in a secret manager (AWS Secrets Manager, HashiCorp Vault) and injected at runtime.
+
+4. **Implement backup and recovery procedures.** Regularly backup etcd and database states.
+
+5. **Test disaster recovery.** Periodically perform a full cluster rebuild from scratch to verify the process works.
+
+6. **Keep Kubernetes and ArgoCD updated.** Regularly update both components for security patches and bug fixes.
+
+7. **Document all custom configurations.** Keep runbooks for common operational tasks.
+
