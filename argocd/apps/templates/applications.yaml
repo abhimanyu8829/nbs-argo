@@ -1,9 +1,9 @@
 {{- range $name, $app := .Values.applications }}
-{{- $targetRevision := required (printf "chartTags.%s is required" $name) (index $.Values.chartTags $name) }}
 {{- $helmValues := dict }}
 {{- if $app.helmValues }}
 {{- $helmValues = mergeOverwrite (deepCopy ($.Values.global.appHelmValues | default dict)) $app.helmValues }}
 {{- end }}
+
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
@@ -13,27 +13,34 @@ metadata:
     argocd.argoproj.io/sync-wave: {{ $app.syncWave | quote }}
   finalizers:
     - resources-finalizer.argocd.argoproj.io
+
 spec:
   project: default
+
   source:
-    repoURL: {{ $.Values.global.ecrRepoUrl | quote }}
-    chart: {{ $app.chart | quote }}
-    targetRevision: {{ $targetRevision | quote }}
+    repoURL: {{ $.Values.global.repoURL | quote }}
+    targetRevision: argocdTest
+    path: helm/{{ $app.chart | replace "-helm" "" }}
+
     {{- if $helmValues }}
     helm:
       values: |
 {{ toYaml $helmValues | indent 8 }}
     {{- end }}
+
   destination:
     server: {{ $.Values.global.destinationServer | quote }}
     namespace: {{ $app.namespace | quote }}
+
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
+
     syncOptions:
 {{- range $option := $app.syncOptions }}
       - {{ $option }}
 {{- end }}
+
 ---
 {{- end }}
