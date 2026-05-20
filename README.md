@@ -16,6 +16,7 @@
 - [Overview](#overview)
 - [Architecture](#architecture)
 - [Microservices Map](#microservices-map)
+- [🚀 Quick Start: Local Testing (WSL)](#-quick-start-local-testing-wsl)
 - [Production Deployment Guide](#production-deployment-guide)
 - [Local Testing Deployment Guide (WSL/Docker)](#local-testing-deployment-guide-wsldocker)
 - [Accessing Services](#accessing-services)
@@ -152,6 +153,174 @@ argocd/root-app.yaml (Root Application)
 | Messenger API | `nitroberry/messenger-api-helm` | `messenger-namespace` | `/socket.io/socket.io.js` | WebSocket-only (Socket.io) |
 | Workflow API | `nitroberry/workflow-api-helm` | `workflow-namespace` | `/api/health` | Orchestration |
 | Workflow Worker | `nitroberry/workflow-worker-helm` | `workflow-namespace` | — | Background jobs |
+
+---
+
+## 🚀 Quick Start: Local Testing (WSL)
+
+### One-Command Deployment
+
+Deploy everything to your WSL Ubuntu environment in one command:
+
+```bash
+cd ~/NitroBerry-Platform/script
+bash deploy-wsl-local.sh
+```
+
+**What this does:**
+1. ✅ Installs base packages (curl, git, jq, ca-certificates)
+2. ✅ Installs Helm 3
+3. ✅ Disables swap (required for Kubernetes)
+4. ✅ Installs containerd container runtime
+5. ✅ Installs kubeadm, kubelet, kubectl (v1.29)
+6. ✅ Initializes single-node Kubernetes cluster
+7. ✅ Installs Calico CNI for networking
+8. ✅ Untaints control-plane node for workload scheduling
+9. ✅ Installs MetalLB for LoadBalancer support
+10. ✅ Installs local-path-provisioner for persistent storage
+11. ✅ Installs ArgoCD
+12. ✅ Deploys all infrastructure (PostgreSQL, Redis, PgBouncer, Traefik)
+13. ✅ Triggers GitOps sync for all 19 microservices
+
+**Expected output:**
+```
+========================================================== 
+NitroBerry GitOps bootstrap COMPLETE!
+==========================================================
+
+✓ Kubernetes cluster ready
+✓ ArgoCD installed
+✓ Core infrastructure deployed
+✓ All 19 pods will be deployed via ArgoCD
+```
+
+### Verify Deployment
+
+After ~5-10 minutes, verify all pods are running:
+
+```bash
+kubectl get pods -A
+kubectl get applications -n argocd
+```
+
+### Access Services
+
+#### 1️⃣ **ArgoCD Dashboard** (GitOps Control Plane)
+```bash
+kubectl port-forward svc/argocd-server -n argocd 8443:443 &
+```
+- **URL:** `https://localhost:8443`
+- **Username:** `admin`
+- **Password:** Run this to get it:
+```bash
+kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d
+```
+
+#### 2️⃣ **Traefik Dashboard** (Ingress Controller)
+```bash
+kubectl port-forward -n traefik-ingress deployment/traefik 9090:8080 &
+```
+- **URL:** `http://localhost:9090/dashboard/`
+
+#### 3️⃣ **PostgreSQL** (Database)
+```bash
+kubectl port-forward svc/postgres-service -n database-namespace 5432:5432 &
+psql -h localhost -U postgres
+# Password: nitroberry-local-pass
+```
+
+#### 4️⃣ **Redis** (Cache)
+```bash
+kubectl port-forward svc/redis-service -n database-namespace 6379:6379 &
+redis-cli -h localhost
+```
+
+#### 5️⃣ **All Microservices**
+```bash
+# Auth API
+kubectl port-forward svc/auth-api-service -n auth-namespace 8001:8080 &
+curl http://localhost:8001/api/health
+
+# Cockpit API
+kubectl port-forward svc/cockpit-api-service -n cockpit-namespace 8002:8080 &
+curl http://localhost:8002/api/health
+
+# Social API
+kubectl port-forward svc/social-api-service -n social-namespace 8003:8080 &
+curl http://localhost:8003/api/health
+
+# ... and so on for other services
+```
+
+### Current Deployment Status
+
+**✅ Working:**
+- Kubernetes cluster (1 node, v1.29.15)
+- ArgoCD (all 6 pods running)
+- PostgreSQL (1/1 running)
+- Redis (1/1 running)
+- PgBouncer (2/2 running)
+- Traefik Ingress (1/1 running)
+- Calico networking (3/3 running)
+- CoreDNS (2/2 running)
+- MetalLB (1/1 running)
+
+**⚠️ CrashLoopBackOff (application startup issues):**
+- Auth API, Cockpit API, Social API, Task API, Workflow API, Messenger API
+- Workers: auth-worker, cockpit-worker, social-worker, task-worker, workflow-worker
+
+**⚠️ Why microservices are crashing:**
+- Missing environment variables or configuration
+- Unable to connect to databases (credentials/endpoints)
+- Missing required external services
+- Image pull errors (ECR authentication in production)
+
+### Troubleshooting Microservice Failures
+
+View logs to debug:
+```bash
+kubectl logs -f <pod-name> -n <namespace>
+```
+
+Example: Check auth-api logs
+```bash
+kubectl logs -f deployment/auth-api -n auth-namespace
+```
+
+Describe a pod for detailed status:
+```bash
+kubectl describe pod <pod-name> -n <namespace>
+```
+
+### Stopping & Restarting
+
+**Stop all port forwards:**
+```bash
+pkill -f "kubectl port-forward"
+```
+
+**Stop the cluster:**
+```bash
+sudo systemctl stop kubelet
+```
+
+**Restart the cluster:**
+```bash
+sudo systemctl restart kubelet
+kubectl wait --for=condition=Ready nodes --all --timeout=300s
+```
+
+### Clean Up Everything
+
+To reset to a fresh cluster:
+```bash
+# Delete the cluster
+sudo kubeadm reset -f
+sudo rm -rf /var/lib/etcd /etc/kubernetes
+
+# Reinstall
+bash deploy-wsl-local.sh
+```
 
 ---
 
