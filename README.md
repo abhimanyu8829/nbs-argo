@@ -16,6 +16,7 @@
 - [Overview](#overview)
 - [Architecture](#architecture)
 - [Microservices Map](#microservices-map)
+- [🔐 Secrets Management (Azure Key Vault)](#secrets-management-azure-key-vault)
 - [🚀 Quick Start: Local Testing (WSL)](#-quick-start-local-testing-wsl)
 - [Production Deployment Guide](#production-deployment-guide)
 - [Local Testing Deployment Guide (WSL/Docker)](#local-testing-deployment-guide-wsldocker)
@@ -153,6 +154,72 @@ argocd/root-app.yaml (Root Application)
 | Messenger API | `nitroberry/messenger-api-helm` | `messenger-namespace` | `/socket.io/socket.io.js` | WebSocket-only (Socket.io) |
 | Workflow API | `nitroberry/workflow-api-helm` | `workflow-namespace` | `/api/health` | Orchestration |
 | Workflow Worker | `nitroberry/workflow-worker-helm` | `workflow-namespace` | — | Background jobs |
+
+---
+
+## 🔐 Secrets Management (Azure Key Vault)
+
+The NitroBerry platform uses **External Secrets Operator (ESO)** and **Reloader** to fully automate secret injection from Azure Key Vault directly into your microservice pods.
+
+This allows developers to manage secrets securely in Azure without DevOps having to manually inject them into Kubernetes.
+
+### The Automated Flow
+1. **Developer pushes secret**: A developer creates or updates a secret directly in Azure Key Vault (via Azure Portal or Azure CLI).
+2. **ESO Syncs it**: The External Secrets Operator (running in the cluster) automatically polls Azure Key Vault. When it detects a new/updated secret, it automatically generates a native Kubernetes `Secret`.
+3. **Reloader restarts pods**: The Reloader operator detects that the Kubernetes `Secret` has changed and automatically triggers a rolling restart of the application pods.
+4. **Pod mounts new secret**: The newly restarted pods mount the fresh secret values as environment variables.
+
+### How to Configure for a Fresher (Step-by-Step)
+
+If you are a new developer or DevOps engineer setting this up, follow these steps meticulously:
+
+#### Step 1: Azure Side (Outbound Ports)
+- Ensure the Kubernetes cluster VM has outbound internet access on port `443` (HTTPS) to reach the Azure Key Vault APIs. No inbound ports need to be opened on AWS for this.
+- Create an Azure Key Vault and an Azure Service Principal (App Registration) with `Key Vault Secrets User` permissions to the vault.
+
+#### Step 2: DevOps Side (Cluster Setup)
+1. Provide the Azure Credentials to the cluster so the Operator can authenticate. Run this on the VM:
+   ```bash
+   kubectl create secret generic azure-secret-sp \
+     --from-literal=ClientID="<YOUR_AZURE_CLIENT_ID>" \
+     --from-literal=ClientSecret="<YOUR_AZURE_CLIENT_SECRET>" \
+     -n external-secrets
+   ```
+2. Open `helm/external-secrets/templates/cluster-secret-store.yaml`.
+3. Update the `vaultUrl` (e.g., `https://my-nitro-vault.vault.azure.net`) and `tenantId` (e.g., `1234abcd-1234-abcd...`).
+4. Commit and push this change to the `main` branch. ArgoCD will automatically apply it.
+
+#### Step 3: Developer Side (Application Code)
+The developer is responsible for updating the Helm chart for their specific microservice (e.g., `auth-api`).
+They need to add an `ExternalSecret` resource to their Helm templates to map the Azure Secret to the Pod:
+
+```yaml
+# In the microservice's Helm chart (e.g., auth-api/templates/external-secret.yaml)
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: auth-api-secret
+spec:
+  refreshInterval: "1m" # How often to poll Azure
+  secretStoreRef:
+    name: azure-backend
+    kind: ClusterSecretStore
+  target:
+    name: auth-api-secret-native
+  dataFrom:
+  - extract:
+      key: "auth-api-azure-secret-name" # Must match the exact name in Azure Key Vault!
+```
+
+They also must add the Reloader annotation to their `Deployment.yaml` to ensure automatic restarts:
+```yaml
+# In auth-api/templates/deployment.yaml
+metadata:
+  annotations:
+    reloader.stakater.com/auto: "true"
+```
+
+Once the developer pushes these changes to their code repository, the CI/CD pipeline builds the new Helm chart, ArgoCD pulls it, and the secrets flow automatically.
 
 ---
 

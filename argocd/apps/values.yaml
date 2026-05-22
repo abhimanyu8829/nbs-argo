@@ -15,6 +15,8 @@ chartTags:
   redis: "1.0.0"
   traefik: "1.0.0"
   opa-gatekeeper: "1.0.0"
+  external-secrets: "1.0.0"
+  reloader: "1.0.0"
   auth-api: "0.0.6"
   auth-worker: "0.0.6"
   cockpit-api: "0.0.2"
@@ -76,6 +78,22 @@ applications:
       - ApplyOutOfSyncOnly=true
       - SkipDryRunOnMissingResource=true
       - ServerSideApply=true
+  external-secrets:
+    chart: external-secrets-helm
+    namespace: external-secrets
+    syncWave: "6"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+      - SkipDryRunOnMissingResource=true
+  reloader:
+    chart: reloader-helm
+    namespace: reloader
+    syncWave: "7"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+      - SkipDryRunOnMissingResource=true
   auth-api:
     chart: auth-api-helm
     namespace: auth-namespace
