@@ -16,6 +16,7 @@ chartTags:
   traefik: "1.0.0"
   opa-gatekeeper: "1.0.0"
   external-secrets: "1.0.0"
+  external-secrets-config: "1.0.0"
   reloader: "1.0.0"
   auth-api: "0.0.6"
   auth-worker: "0.0.6"
@@ -86,10 +87,18 @@ applications:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
       - SkipDryRunOnMissingResource=true
+  external-secrets-config:
+    chart: external-secrets-config-helm
+    namespace: external-secrets
+    syncWave: "7"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+      - SkipDryRunOnMissingResource=true
   reloader:
     chart: reloader-helm
     namespace: reloader
-    syncWave: "7"
+    syncWave: "8"
     syncOptions:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true

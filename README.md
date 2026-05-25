@@ -70,7 +70,10 @@ NitroBerry-Platform/
 │   ├── redis/                            [USEFUL] Redis Deployment  
 │   ├── pgbouncer/                        [USEFUL] Connection pooler Deployment
 │   ├── traefik/                          [USEFUL] Ingress controller Deployment
-│   └── opa-gatekeeper/                   [USEFUL] Policy enforcement controller
+│   ├── opa-gatekeeper/                   [USEFUL] Policy enforcement controller
+│   ├── external-secrets/                 [USEFUL] External Secrets Operator + CRDs
+│   ├── external-secrets-config/          [USEFUL] Azure Key Vault ClusterSecretStore
+│   └── reloader/                         [USEFUL] Pod restarts after Secret changes
 │
 ├── 🔄 argocd/                            [GITOPS ORCHESTRATION]
 │   ├── root-app.yaml                     [USEFUL] ✨ MAIN: Entry point for ArgoCD sync
@@ -120,6 +123,9 @@ argocd/root-app.yaml (Root Application)
         ├── redis            (sync-wave 3)
         ├── traefik          (sync-wave 4)
         ├── opa-gatekeeper   (sync-wave 5)
+        ├── external-secrets (sync-wave 6)
+        ├── external-secrets-config (sync-wave 7)
+        ├── reloader         (sync-wave 8)
         ├── auth-api         (sync-wave 10) ← APIs deploy next
         ├── vault-api        (sync-wave 11)
         ├── cockpit-api      (sync-wave 12)
@@ -185,7 +191,7 @@ If you are a new developer or DevOps engineer setting this up, follow these step
      --from-literal=ClientSecret="<YOUR_AZURE_CLIENT_SECRET>" \
      -n external-secrets
    ```
-2. Open `helm/external-secrets/templates/cluster-secret-store.yaml`.
+2. Open `helm/external-secrets-config/values.yaml`.
 3. Update the `vaultUrl` (e.g., `https://my-nitro-vault.vault.azure.net`) and `tenantId` (e.g., `1234abcd-1234-abcd...`).
 4. Commit and push this change to the `main` branch. ArgoCD will automatically apply it.
 
@@ -434,12 +440,12 @@ git checkout argocdTest
 #### Step 1.4: Lint the Infrastructure Charts
 Validate that the Helm charts are syntactically correct before pushing:
 ```bash
-helm lint helm/metallb helm/postgres helm/pgbouncer helm/redis helm/traefik helm/opa-gatekeeper argocd/apps
+helm lint helm/* argocd/apps
 ```
-*(Expected Output: `7 chart(s) linted, 0 chart(s) failed`)*
+*(Expected Output: all charts linted, 0 chart(s) failed)*
 
 #### Step 1.5: Push Infrastructure Charts to ECR
-Run the automated script to package and push the 6 infrastructure charts to your AWS account.
+Run the automated script to package and push the infrastructure charts to your AWS account.
 ```bash
 chmod +x script/push-infra-charts.sh
 ./script/push-infra-charts.sh ap-south-1
