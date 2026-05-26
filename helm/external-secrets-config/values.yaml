@@ -5,5 +5,5 @@ azureKeyVault:
   authSecret:
     name: azure-secret-sp
     namespace: external-secrets
-    clientIdKey: ClientID
-    clientSecretKey: ClientSecret
+    clientIdKey: 
+    clientSecretKey: ""

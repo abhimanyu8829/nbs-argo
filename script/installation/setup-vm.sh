@@ -205,26 +205,27 @@ echo "=> Waiting for Kubernetes node to be ready..."
 sleep 10
 kubectl wait --for=condition=Ready nodes --all --timeout=600s
 
-# 3. Clone Repository
-echo "=> [3/7] Cloning NitroBerry Git repository..."
-if [ -d "NitroBerry-Platform" ]; then
-    rm -rf NitroBerry-Platform
+# 3. Use current repository
+echo "=> [3/7] Using current NitroBerry repository..."
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(realpath "$SCRIPT_DIR/../..")"
+
+cd "$REPO_ROOT"
+
+# 4. Verify Existing ArgoCD Installation
+echo "=> [4/7] Checking existing ArgoCD installation..."
+
+if kubectl get namespace argocd >/dev/null 2>&1; then
+    echo "ArgoCD already installed. Skipping installation."
+else
+    echo "Installing ArgoCD..."
+    kubectl create namespace argocd
+    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+    echo "=> Waiting for ArgoCD server to be ready..."
+    kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
 fi
-git clone "$GIT_REPO_URL"
-# Extract directory name from repo URL
-REPO_DIR=$(basename "$GIT_REPO_URL" .git)
-cd "$REPO_DIR"
-git checkout "$GIT_BRANCH" || true
-
-install_external_secrets_crds
-
-# 4. Install ArgoCD
-echo "=> [4/7] Installing ArgoCD..."
-kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml > /dev/null
-
-echo "=> Waiting for ArgoCD server to be ready (this may take a minute)..."
-kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
 
 # 5. ECR Login & ArgoCD Repo Configuration
 echo "=> [5/7] Configuring AWS ECR tokens and CronJob..."
