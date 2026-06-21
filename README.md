@@ -770,12 +770,97 @@ kubectl exec -n database-namespace deploy/redis -- redis-cli ping
 ```
 
 #### Step 5.5: Verify Gatekeeper Security Policies
-Ensure the OPA Gatekeeper constraints have successfully applied.
+
+OPA Gatekeeper enforces 6 security policies to ensure compliance and security best practices across the NitroBerry platform. These policies are enforced at the Kubernetes admission controller level, meaning non-compliant deployments are rejected automatically.
+
+**Verify that all policies have been applied:**
 ```bash
 kubectl get constrainttemplates
 kubectl get constraints
 ```
-* **Expected Output:** You should see 6 policies listed, including `blocklatesttag`, `blockprivilegedcontainers`, `blockrootcontainers`, `requirelabels`, `requirereadonlyrootfs`, and `requireresourcelimits`.
+
+##### 🔒 Enforced OPA Gatekeeper Policies
+
+| # | Policy Name | Enforcement | Applied To | Purpose |
+|---|------------|-------------|-----------|---------|
+| 1 | **RequireResourceLimits** | DENY | Deployments, StatefulSets | All containers must have CPU and memory limits/requests |
+| 2 | **RequireLabels** | DENY | Deployments | All pods must have `app` and `managed-by` labels |
+| 3 | **BlockPrivilegedContainers** | DENY | Deployments, StatefulSets, DaemonSets | No containers can run with `privileged: true` |
+| 4 | **BlockRootContainers** | DENY | Deployments, StatefulSets | All pods must set `securityContext.runAsNonRoot: true` |
+| 5 | **RequireReadOnlyRootFS** | DENY | Deployments | All containers must set `readOnlyRootFilesystem: true` |
+| 6 | **BlockLatestTag** | DENY | Deployments, StatefulSets | Images must use pinned version tags (no `:latest` or untagged images) |
+
+##### Applied Namespaces
+
+These policies are enforced across the following namespaces:
+- `auth-namespace`
+- `cockpit-namespace`
+- `messenger-namespace`
+- `social-namespace`
+- `task-namespace`
+- `vault-namespace`
+- `workflow-namespace`
+- `database-namespace` (for database infrastructure)
+- `traefik-ingress` (for ingress controller)
+
+##### Policy Details
+
+**1. RequireResourceLimits**
+- Ensures every container has CPU and memory **limits** set
+- Ensures every container has CPU and memory **requests** set
+- Prevents resource exhaustion and improves cluster stability
+- Violation message: `Container 'X' must have a CPU limit set`
+
+**2. RequireLabels**
+- Requires all pods to have the following labels:
+  - `app`: Name of the application/service
+  - `managed-by`: Should be set to `nitroberry`
+- Improves pod visibility, filtering, and RBAC rule targeting
+
+**3. BlockPrivilegedContainers**
+- Prevents containers from running with `privileged: true`
+- Reduces security risk by limiting kernel access
+- Violation message: `Container 'X' must not run as privileged`
+
+**4. BlockRootContainers**
+- Requires `securityContext.runAsNonRoot: true` at the pod level
+- Prevents containers from running as root (UID 0)
+- Violation message: `Pod must set securityContext.runAsNonRoot: true`
+
+**5. RequireReadOnlyRootFS**
+- Requires every container to set `readOnlyRootFilesystem: true`
+- Makes the root filesystem immutable, reducing attack surface
+- Violation message: `Container 'X' must set readOnlyRootFilesystem: true`
+
+**6. BlockLatestTag**
+- Blocks images with `:latest` tag
+- Blocks images without any version tag
+- Ensures all deployments use pinned, reproducible versions
+- Violation message: `Container 'X' must not use ':latest' tag. Pin to a specific version.`
+
+##### Expected Output
+
+When you run the verify command, you should see output similar to:
+```
+NAME                                CREATED AT
+blocklatesttag                       2024-01-15T10:30:00Z
+blockprivilegedcontainers           2024-01-15T10:30:00Z
+blockrootcontainers                 2024-01-15T10:30:00Z
+requirelabels                        2024-01-15T10:30:00Z
+requirereadonlyrootfs               2024-01-15T10:30:00Z
+requireresourcelimits               2024-01-15T10:30:00Z
+```
+
+And for constraints:
+```
+NAME                     CONSTRAINT                  STATUS
+block-latest-tag         BlockLatestTag              Active
+block-privileged-containers  BlockPrivilegedContainers   Active
+block-root-containers    BlockRootContainers         Active
+require-pod-labels       RequireLabels               Active
+require-readonly-rootfs  RequireReadOnlyRootFS       Active
+require-resource-limits  RequireResourceLimits       Active
+```
 
 ---
 
