@@ -15,6 +15,7 @@
 - [Repository Structure & File Organization](#repository-structure--file-organization)
 - [Overview](#overview)
 - [Architecture](#architecture)
+- [Production Deployment Flow Diagram](#-production-deployment-flow-diagram)
 - [Microservices Map](#microservices-map)
 - [🔐 Secrets Management (Azure Key Vault)](#secrets-management-azure-key-vault)
 - [🚀 Quick Start: Local Testing (WSL)](#-quick-start-local-testing-wsl)
@@ -140,6 +141,85 @@ argocd/root-app.yaml (Root Application)
         ├── task-worker      (sync-wave 24)
         └── workflow-worker  (sync-wave 26)
 ```
+
+---
+
+## 🔄 Production Deployment Flow Diagram
+
+This diagram shows the complete end-to-end GitOps flow from code commit to production deployment:
+
+```mermaid
+graph TD
+    A["👨‍💻 Developer"] -->|Push code to Git| B["GitHub Repo<br/>(main/argocdTest branch)<br/>argocd/apps/chart-tags.yaml"]
+    
+    B -->|Webhook trigger| C["🔨 CI/CD Pipeline<br/>(GitHub Actions)"]
+    
+    C -->|1. Build & Test| D["Build Docker Image"]
+    C -->|2. Push Image| E["📦 AWS ECR<br/>nitroberry/auth-api:0.0.7"]
+    C -->|3. Update Version| F["Update chart-tags.yaml<br/>auth-api: '0.0.7'<br/>Commit & Push"]
+    
+    F -->|Git change detected| G["🎯 ArgoCD Server<br/>Watching: argocdTest branch"]
+    
+    G -->|Reads| H["argocd/root-app.yaml<br/>↓<br/>argocd/apps/Chart.yaml<br/>argocd/apps/values.yaml<br/>argocd/apps/chart-tags.yaml"]
+    
+    H -->|Generates from template| I["argocd/apps/templates/<br/>applications.yaml"]
+    
+    I -->|Creates/Updates| J["🎪 ArgoCD Applications<br/>sync-wave 1: metallb<br/>sync-wave 2: postgres<br/>sync-wave 3: pgbouncer, redis<br/>...<br/>sync-wave 10: auth-api<br/>sync-wave 20: auth-worker<br/>..."]
+    
+    J -->|Auto-sync enabled| K["⚙️ Kubernetes Cluster<br/>Apply manifests in order"]
+    
+    K -->|Wave 1-9| L1["Infrastructure<br/>MetalLB, PostgreSQL,<br/>Redis, PgBouncer,<br/>Traefik, OPA,<br/>External Secrets,<br/>Reloader"]
+    
+    K -->|Wave 10-26| L2["Microservices<br/>Auth, Vault, Cockpit,<br/>Social, Task, Messenger,<br/>Workflow APIs & Workers"]
+    
+    L1 -->|Ready| M["✅ Infrastructure Ready"]
+    L2 -->|Ready| N["✅ All Services Running"]
+    
+    M --> O["📊 Monitoring & Alerts<br/>ArgoCD sync status<br/>Pod health checks<br/>Application logs"]
+    N --> O
+    
+    O -->|If rollback needed| P["🔙 Rollback<br/>Revert chart-tags.yaml<br/>Push to Git<br/>ArgoCD auto-syncs"]
+    
+    style A fill:#90EE90
+    style B fill:#87CEEB
+    style C fill:#FFD700
+    style G fill:#FF69B4
+    style K fill:#9370DB
+    style M fill:#98FB98
+    style N fill:#98FB98
+    style O fill:#FFA07A
+    style P fill:#FFB6C6
+```
+
+### Flow Explanation
+
+| Step | Component | Action |
+|------|-----------|--------|
+| **1** | Developer | Pushes new code or config to Git (argocdTest branch) |
+| **2** | CI/CD Pipeline | GitHub Actions (or similar) detects the push |
+| **3** | CI/CD: Build | Builds Docker image for the service |
+| **4** | CI/CD: Push | Pushes image to AWS ECR as `nitroberry/service:version` |
+| **5** | CI/CD: Update Config | Updates `argocd/apps/chart-tags.yaml` with new version tag |
+| **6** | CI/CD: Commit | Commits and pushes the updated `chart-tags.yaml` back to Git |
+| **7** | ArgoCD | Detects Git change within 3 minutes (polling) or immediately (webhook) |
+| **8** | ArgoCD | Reads root app, generates child applications from Helm templates |
+| **9** | Kubernetes | Applies manifests in **sync-wave order** (1, 2, 3... up to 26) |
+| **10** | Kubernetes: Wave 1-9 | Deploys infrastructure (MetalLB, Postgres, Redis, Traefik, etc.) |
+| **11** | Kubernetes: Wave 10-26 | Deploys microservices (APIs and Workers) |
+| **12** | Monitoring | Verifies all pods are running and healthy |
+| **13** | Rollback (if needed) | Simply revert the version in Git → ArgoCD auto-syncs back to previous version |
+
+### Key Points
+
+✅ **Fully Automatic:** Once code is pushed to Git, ArgoCD handles everything—no manual `kubectl apply` needed.
+
+✅ **Version Pinning:** Every deployment uses an exact version (e.g., `0.0.7`), not `latest`. This ensures repeatable, safe deployments.
+
+✅ **Sync Waves:** Infrastructure deploys first (waves 1-9), then applications (waves 10-26). This prevents race conditions.
+
+✅ **Auto-Rollback:** If anything fails, revert the Git commit → ArgoCD automatically rolls back the cluster state.
+
+✅ **GitOps Single Source of Truth:** The Git repository (`argocdTest` branch) is the only place that matters. Kubernetes state always matches Git.
 
 ---
 
