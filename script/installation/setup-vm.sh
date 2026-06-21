@@ -6,6 +6,10 @@ GIT_BRANCH="${GIT_BRANCH:-argocdTest}"
 AWS_REGION_DEFAULT="${AWS_REGION_DEFAULT:-ap-south-1}"
 AWS_REGION="${AWS_REGION:-$AWS_REGION_DEFAULT}"
 K8S_VERSION="${K8S_VERSION:-v1.29}"
+AZURE_CLIENT_ID="${AZURE_CLIENT_ID:-}"
+AZURE_CLIENT_SECRET="${AZURE_CLIENT_SECRET:-}"
+POSTGRES_USER="${POSTGRES_USER:-postgres}"
+POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
 
 log() {
   echo ""
@@ -123,6 +127,74 @@ ensure_kubernetes_cluster() {
   kubectl taint nodes --all node-role.kubernetes.io/control-plane- || true
 }
 
+wait_for_namespace() {
+  local namespace="$1"
+  local attempts="${2:-60}"
+  local sleep_seconds="${3:-5}"
+
+  log "Waiting for namespace ${namespace} to be created by ArgoCD"
+
+  for _ in $(seq 1 "$attempts"); do
+    if kubectl get namespace "$namespace" >/dev/null 2>&1; then
+      return
+    fi
+    sleep "$sleep_seconds"
+  done
+
+  echo "Namespace ${namespace} was not created in time. Check ArgoCD sync status before creating runtime secrets."
+  exit 1
+}
+
+install_external_secrets_crds() {
+  log "Preparing External Secrets CRDs"
+
+  if [ -d "./helm/external-secrets" ]; then
+    log "Pre-installing External Secrets CRDs"
+    helm dependency build ./helm/external-secrets >/dev/null
+
+    ESO_CHART_PACKAGE="$(find ./helm/external-secrets/charts -name 'external-secrets-*.tgz' | head -n 1)"
+    if [ -z "$ESO_CHART_PACKAGE" ]; then
+      echo "Could not find External Secrets dependency package under ./helm/external-secrets/charts."
+      exit 1
+    fi
+
+    helm show crds "$ESO_CHART_PACKAGE" | kubectl apply -f -
+    kubectl wait --for=condition=Established crd/clustersecretstores.external-secrets.io --timeout=120s
+    kubectl wait --for=condition=Established crd/externalsecrets.external-secrets.io --timeout=120s
+    kubectl wait --for=condition=Established crd/secretstores.external-secrets.io --timeout=120s
+  fi
+}
+
+bootstrap_azure_service_principal_secret() {
+  if [ -z "$AZURE_CLIENT_ID" ] || [ -z "$AZURE_CLIENT_SECRET" ]; then
+    echo "Skipping azure-secret-sp creation. Set AZURE_CLIENT_ID and AZURE_CLIENT_SECRET before running this script."
+    return
+  fi
+
+  wait_for_namespace external-secrets
+
+  kubectl create secret generic azure-secret-sp \
+    --from-literal=ClientID="$AZURE_CLIENT_ID" \
+    --from-literal=ClientSecret="$AZURE_CLIENT_SECRET" \
+    -n external-secrets --dry-run=client -o yaml | kubectl apply -f -
+  echo "Azure Service Principal credentials stored in Kubernetes secret external-secrets/azure-secret-sp."
+}
+
+bootstrap_postgres_credentials_secret() {
+  if [ -z "$POSTGRES_PASSWORD" ]; then
+    echo "Skipping postgres-credentials creation. Set POSTGRES_PASSWORD before running this script."
+    return
+  fi
+
+  wait_for_namespace database-namespace
+
+  kubectl create secret generic postgres-credentials \
+    --from-literal=postgres-user="$POSTGRES_USER" \
+    --from-literal=postgres-password="$POSTGRES_PASSWORD" \
+    -n database-namespace --dry-run=client -o yaml | kubectl apply -f -
+  echo "Postgres credentials stored in Kubernetes secret database-namespace/postgres-credentials."
+}
+
 # Run bootstrap sequence
 install_base_packages
 install_aws_cli
@@ -133,24 +205,27 @@ echo "=> Waiting for Kubernetes node to be ready..."
 sleep 10
 kubectl wait --for=condition=Ready nodes --all --timeout=600s
 
-# 3. Clone Repository
-echo "=> [3/7] Cloning NitroBerry Git repository..."
-if [ -d "NitroBerry-Platform" ]; then
-    rm -rf NitroBerry-Platform
+# 3. Use current repository
+echo "=> [3/7] Using current NitroBerry repository..."
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(realpath "$SCRIPT_DIR/../..")"
+
+cd "$REPO_ROOT"
+
+# 4. Verify Existing ArgoCD Installation
+echo "=> [4/7] Checking existing ArgoCD installation..."
+
+if kubectl get namespace argocd >/dev/null 2>&1; then
+    echo "ArgoCD already installed. Skipping installation."
+else
+    echo "Installing ArgoCD..."
+    kubectl create namespace argocd
+    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+
+    echo "=> Waiting for ArgoCD server to be ready..."
+    kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
 fi
-git clone "$GIT_REPO_URL"
-# Extract directory name from repo URL
-REPO_DIR=$(basename "$GIT_REPO_URL" .git)
-cd "$REPO_DIR"
-git checkout "$GIT_BRANCH" || true
-
-# 4. Install ArgoCD
-echo "=> [4/7] Installing ArgoCD..."
-kubectl create namespace argocd --dry-run=client -o yaml | kubectl apply -f -
-kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml > /dev/null
-
-echo "=> Waiting for ArgoCD server to be ready (this may take a minute)..."
-kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
 
 # 5. ECR Login & ArgoCD Repo Configuration
 echo "=> [5/7] Configuring AWS ECR tokens and CronJob..."
@@ -166,17 +241,8 @@ kubectl create secret docker-registry ecr-regcred \
 # Deploy the ECR helper to keep tokens fresh.
 kubectl apply -f ./script/installation/ecr-helper.yaml
 
-# 6. Apply Core Infrastructure & Secrets
-echo "=> [6/7] Applying Core Infrastructure (MetalLB and pre-provisioning secrets)..."
-
-# Pre-create namespaces
-kubectl create namespace database-namespace --dry-run=client -o yaml | kubectl apply -f -
-
-# Create Postgres credentials secret
-kubectl create secret generic postgres-credentials \
-  --from-literal=postgres-user=postgres \
-  --from-literal=postgres-password=nitroberry-prod-db-pass \
-  -n database-namespace --dry-run=client -o yaml | kubectl apply -f -
+# 6. Apply Core Infrastructure
+echo "=> [6/7] Applying Core Infrastructure prerequisites..."
 
 # Install MetalLB operator explicitly (CRDs first, wait, then IP pool config is managed by helm)
 echo "=> Installing MetalLB operator..."
@@ -192,6 +258,10 @@ echo "=> [7/7] Applying ArgoCD Apps (Triggering GitOps deployment)..."
 sed -i "s/798701233691.dkr.ecr.ap-south-1.amazonaws.com/${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com/g" ./argocd/root-app.yaml
 
 kubectl apply -f ./argocd/root-app.yaml
+
+echo "=> Bootstrapping runtime secrets after ArgoCD creates target namespaces..."
+bootstrap_azure_service_principal_secret
+bootstrap_postgres_credentials_secret
 
 echo ""
 echo "=========================================================="

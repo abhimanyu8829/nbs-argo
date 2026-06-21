@@ -41,6 +41,7 @@ for chart_dir in "$CHART_ROOT"/*; do
       --repository-name "$repository_name" \
       --region "$AWS_REGION" >/dev/null
 
+  helm dependency build "$chart_dir" >/dev/null
   helm lint "$chart_dir"
   helm package "$chart_dir" --destination "$PACKAGE_DIR"
   helm push "$package_path" "$OCI_PARENT"

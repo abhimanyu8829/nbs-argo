@@ -1,0 +1,9 @@
+azureKeyVault:
+  storeName: azure-backend
+  vaultUrl: "https://nitroberry-vault.vault.azure.net/"
+  tenantId: ""
+  authSecret:
+    name: azure-secret-sp
+    namespace: external-secrets
+    clientIdKey: 
+    clientSecretKey: ""
