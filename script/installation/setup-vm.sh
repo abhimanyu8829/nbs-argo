@@ -11,10 +11,33 @@ AZURE_CLIENT_SECRET="${AZURE_CLIENT_SECRET:-}"
 POSTGRES_USER="${POSTGRES_USER:-postgres}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-}"
 
+# ---------------------------------------------------------------------------
+# Architecture detection
+# Both "arm64" (Docker/macOS naming) and "aarch64" (Linux kernel naming) are
+# the same physical architecture. We normalise to a single ARCH variable that
+# downstream functions can branch on.
+# ---------------------------------------------------------------------------
+detect_arch() {
+  local raw
+  raw="$(uname -m)"
+  case "$raw" in
+    x86_64)           echo "x86_64" ;;
+    arm64 | aarch64)  echo "arm64"  ;;
+    *)
+      echo "ERROR: Unsupported architecture: $raw" >&2
+      exit 1
+      ;;
+  esac
+}
+
+ARCH="$(detect_arch)"
+
 log() {
   echo ""
   echo "=> $1"
 }
+
+log "Detected system architecture: $(uname -m) → normalised as ${ARCH}"
 
 command_exists() {
   command -v "$1" >/dev/null 2>&1
@@ -30,14 +53,27 @@ install_base_packages() {
   sudo apt-get install -y curl unzip git jq ca-certificates apt-transport-https gpg >/dev/null
 }
 
+# ---------------------------------------------------------------------------
+# AWS CLI — credentials come from `aws configure` (run before this script).
+# AWS_ACCOUNT_ID is auto-detected at runtime via sts get-caller-identity.
+# The only arch difference is the download URL.
+# ---------------------------------------------------------------------------
 install_aws_cli() {
   if command_exists aws; then
     echo "AWS CLI already installed."
     return
   fi
 
-  log "Installing AWS CLI v2"
-  curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+  log "Installing AWS CLI v2 (arch: ${ARCH})"
+
+  if [[ "${ARCH}" == "arm64" ]]; then
+    # arm64 / aarch64 — same binary, AWS names it "aarch64"
+    curl -s "https://awscli.amazonaws.com/awscli-exe-linux-aarch64.zip" -o "awscliv2.zip"
+  else
+    # x86_64
+    curl -s "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+  fi
+
   unzip -q awscliv2.zip
   sudo ./aws/install >/dev/null
   rm -rf aws awscliv2.zip
@@ -49,17 +85,25 @@ install_helm() {
     return
   fi
 
-  log "Installing Helm"
+  log "Installing Helm (official script handles arch automatically)"
   curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 }
 
+# ---------------------------------------------------------------------------
+# Kubernetes packages
+# The apt repository and packages are the same for both architectures —
+# apt resolves the correct binary automatically. The one thing that differs
+# is the containerd binary path check on arm64 OCI images (already handled
+# by the distro package), so no manual branching is needed here beyond a
+# clear log line confirming which arch is in use.
+# ---------------------------------------------------------------------------
 install_kubernetes_packages() {
   if command_exists kubeadm && command_exists kubelet && command_exists kubectl; then
     echo "Kubernetes packages already installed."
     return
   fi
 
-  log "Installing kubeadm, kubelet, kubectl, and containerd"
+  log "Installing kubeadm, kubelet, kubectl, and containerd (arch: ${ARCH})"
   sudo swapoff -a
   sudo sed -i '/ swap / s/^\(.*\)$/#\1/g' /etc/fstab
 
@@ -77,6 +121,7 @@ net.ipv4.ip_forward                 = 1
 EOF
   sudo sysctl --system >/dev/null
 
+  # containerd — the apt package is multi-arch; apt picks the right binary
   sudo apt-get install -y containerd >/dev/null
   sudo mkdir -p /etc/containerd
   containerd config default | sudo tee /etc/containerd/config.toml >/dev/null
@@ -84,6 +129,7 @@ EOF
   sudo systemctl restart containerd
   sudo systemctl enable containerd >/dev/null
 
+  # Kubernetes apt repo — arch-agnostic URL; apt resolves the right .deb
   sudo mkdir -p /etc/apt/keyrings
   curl -fsSL "https://pkgs.k8s.io/core:/stable:/${K8S_VERSION}/deb/Release.key" \
     | sudo gpg --dearmor -o /etc/apt/keyrings/kubernetes-apt-keyring.gpg --yes
@@ -195,7 +241,11 @@ bootstrap_postgres_credentials_secret() {
   echo "Postgres credentials stored in Kubernetes secret database-namespace/postgres-credentials."
 }
 
-# Run bootstrap sequence
+# ---------------------------------------------------------------------------
+# Bootstrap sequence
+# AWS credentials are expected to already be configured via `aws configure`.
+# AWS_ACCOUNT_ID is auto-detected below — no need to hardcode it.
+# ---------------------------------------------------------------------------
 install_base_packages
 install_aws_cli
 install_helm
@@ -228,14 +278,16 @@ else
 fi
 
 # 5. ECR Login & ArgoCD Repo Configuration
+# AWS_ACCOUNT_ID is auto-detected from the credentials set via `aws configure`
 echo "=> [5/7] Configuring AWS ECR tokens and CronJob..."
-AWS_TOKEN=$(aws ecr get-login-password --region $AWS_REGION)
+AWS_TOKEN=$(aws ecr get-login-password --region "$AWS_REGION")
 AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+echo "    Using AWS Account: ${AWS_ACCOUNT_ID} | Region: ${AWS_REGION} | Arch: ${ARCH}"
 
 kubectl create secret docker-registry ecr-regcred \
-  --docker-server=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com \
+  --docker-server="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com" \
   --docker-username=AWS \
-  --docker-password=$AWS_TOKEN \
+  --docker-password="$AWS_TOKEN" \
   -n argocd --dry-run=client -o yaml | kubectl apply -f -
 
 # Deploy the ECR helper to keep tokens fresh.
@@ -266,6 +318,7 @@ bootstrap_postgres_credentials_secret
 echo ""
 echo "=========================================================="
 echo "NitroBerry GitOps bootstrap complete."
+echo "Architecture: ${ARCH} ($(uname -m))"
 echo "ArgoCD is now configured to pull infrastructure Helm charts from ECR."
 echo "Application API/worker charts are expected to live in their own app repos."
 echo ""

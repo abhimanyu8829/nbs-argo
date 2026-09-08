@@ -4,13 +4,37 @@ set -euo pipefail
 # NitroBerry Platform: Production Deployment Verification & Configuration Script
 # This script runs AFTER setup-vm.sh completes to ensure all production requirements are met
 # It performs: storage provisioning, ECR credential distribution, ArgoCD configuration, pod readiness checks
+#
+# Prerequisites:
+#   - Run `aws configure` before this script. AWS_ACCOUNT_ID is auto-detected.
+#   - Works on both x86_64 and arm64/aarch64 machines.
 
 AWS_REGION="${AWS_REGION:-ap-south-1}"
-AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-}"
+AWS_ACCOUNT_ID="${AWS_ACCOUNT_ID:-}"          # auto-detected below if empty
 ECR_REPO_PATH="${ECR_REPO_PATH:-nitroberry}"
 ARGOCD_NAMESPACE="${ARGOCD_NAMESPACE:-argocd}"
 WAIT_TIMEOUT="${WAIT_TIMEOUT:-600s}"
 INSTALL_LOCAL_PATH_STORAGE="${INSTALL_LOCAL_PATH_STORAGE:-true}"
+
+# ---------------------------------------------------------------------------
+# Architecture detection
+# "arm64" (Docker/macOS) and "aarch64" (Linux kernel) are the same chip.
+# We normalise to arm64 or x86_64 so every branch below is clear.
+# ---------------------------------------------------------------------------
+detect_arch() {
+  local raw
+  raw="$(uname -m)"
+  case "$raw" in
+    x86_64)           echo "x86_64" ;;
+    arm64 | aarch64)  echo "arm64"  ;;
+    *)
+      echo "ERROR: Unsupported architecture: $raw" >&2
+      exit 1
+      ;;
+  esac
+}
+
+ARCH="$(detect_arch)"
 
 # All namespaces that need ECR credentials
 APP_NAMESPACES=(
@@ -56,22 +80,28 @@ require_command jq
 require_command kubectl
 
 section "PHASE 1: Kubernetes & AWS Access Verification"
+log "System architecture: $(uname -m) → normalised as ${ARCH}"
+
 log "Checking Kubernetes cluster access..."
 kubectl version --client >/dev/null || { echo "ERROR: kubectl not configured"; exit 1; }
 kubectl get namespace "${ARGOCD_NAMESPACE}" >/dev/null || { echo "ERROR: ArgoCD namespace not found"; exit 1; }
 
-log "Checking AWS credentials..."
+# AWS_ACCOUNT_ID — auto-detected from credentials configured via `aws configure`
+log "Checking AWS credentials (configured via aws configure)..."
 if [[ -z "${AWS_ACCOUNT_ID}" ]]; then
   AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
   log "Auto-detected AWS Account ID: ${AWS_ACCOUNT_ID}"
 fi
-aws sts get-caller-identity >/dev/null || { echo "ERROR: AWS credentials invalid"; exit 1; }
+aws sts get-caller-identity >/dev/null || { echo "ERROR: AWS credentials invalid. Run 'aws configure' first."; exit 1; }
+log "AWS Account: ${AWS_ACCOUNT_ID} | Region: ${AWS_REGION}"
 
 section "PHASE 2: Storage Provisioning"
+# The local-path-provisioner manifest is architecture-agnostic — the image
+# inside supports both amd64 and arm64 via multi-arch manifests.
 if [[ "${INSTALL_LOCAL_PATH_STORAGE}" == "true" ]]; then
   log "Checking for existing StorageClass..."
   if ! kubectl get storageclass local-path >/dev/null 2>&1; then
-    log "Installing local-path-provisioner (storage for persistent volumes)..."
+    log "Installing local-path-provisioner (arch: ${ARCH} — multi-arch image, same manifest)..."
     kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
     kubectl wait --for=condition=available deployment/local-path-provisioner -n local-path-storage --timeout=120s
     log "✓ Local-path StorageClass installed"
@@ -89,7 +119,7 @@ ECR_REGISTRY="${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_REGION}.amazonaws.com"
 create_ecr_secret() {
   local namespace=$1
   log "  Creating ECR secret in namespace: $namespace"
-  
+
   # Create namespace if it doesn't exist
   kubectl create namespace "$namespace" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
 
@@ -121,7 +151,7 @@ ARGOCD_PASSWORD=$(kubectl -n argocd get secret argocd-initial-admin-secret -o js
 
 if [[ -n "${ARGOCD_PASSWORD}" ]]; then
   log "  Updating ArgoCD repo-server credentials for ECR..."
-  
+
   # Create a secret with ECR credentials for ArgoCD repo-server
   kubectl create secret generic argocd-ecr-creds \
     --from-literal=username=AWS \
@@ -221,6 +251,7 @@ fi
 section "DEPLOYMENT COMPLETE"
 echo ""
 echo "✅ NitroBerry Platform is deployed and ready for production!"
+echo "   Architecture: ${ARCH} ($(uname -m))"
 echo ""
 echo "Next Steps:"
 echo "1. Access ArgoCD Dashboard:"
