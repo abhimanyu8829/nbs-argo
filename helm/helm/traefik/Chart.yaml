@@ -1,6 +1,0 @@
-apiVersion: v2
-name: traefik-helm
-description: NitroBerry Traefik ingress controller, RBAC, service, and middlewares
-type: application
-version: 1.0.0
-appVersion: "3.0"

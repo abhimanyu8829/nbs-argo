@@ -1,6 +1,0 @@
-apiVersion: v2
-name: postgres-helm
-description: NitroBerry PostgreSQL StatefulSet, service, init schemas, and network policy
-type: application
-version: 1.0.0
-appVersion: "15"

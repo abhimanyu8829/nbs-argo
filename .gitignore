@@ -1,3 +1,5 @@
 helm/**/charts/
 helm/**/Chart.lock
 *.tgz
+
+deploy-scripts/00-config.env

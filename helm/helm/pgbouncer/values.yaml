@@ -1,3 +1,0 @@
-pgbouncer:
-  namespace: database-namespace
-  replicas: 2

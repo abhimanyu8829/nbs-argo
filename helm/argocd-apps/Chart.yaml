@@ -1,6 +1,0 @@
-apiVersion: v2
-name: argocd-apps
-description: ArgoCD app-of-apps for NitroBerry platform Helm charts
-type: application
-version: 1.0.0
-appVersion: "1.0.0"
