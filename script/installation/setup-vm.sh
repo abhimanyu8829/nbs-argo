@@ -277,6 +277,22 @@ else
     kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
 fi
 
+# Loosen argocd-repo-server's probe timeouts. The default 5s timeout is too
+# tight in some environments and causes CrashLoopBackOff even when the
+# process is healthy and the node has free resources. Safe to run every
+# time (idempotent) — patches whether ArgoCD was just installed above or
+# already existed from a previous run.
+echo "=> Patching argocd-repo-server probe timeouts (avoids false-positive CrashLoopBackOff)..."
+kubectl patch deployment argocd-repo-server -n argocd --type='json' -p='[
+  {"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/timeoutSeconds","value":30},
+  {"op":"replace","path":"/spec/template/spec/containers/0/livenessProbe/failureThreshold","value":10},
+  {"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/timeoutSeconds","value":30},
+  {"op":"replace","path":"/spec/template/spec/containers/0/readinessProbe/failureThreshold","value":10}
+]' || echo "Probe patch skipped (repo-server may not exist yet on a brand-new cluster — safe to ignore)."
+
+echo "=> Waiting for argocd-repo-server to be ready after probe patch..."
+kubectl wait --for=condition=available deployment/argocd-repo-server -n argocd --timeout=180s || true
+
 # 5. ECR Login & ArgoCD Repo Configuration
 # AWS_ACCOUNT_ID is auto-detected from the credentials set via `aws configure`
 echo "=> [5/7] Configuring AWS ECR tokens and CronJob..."
