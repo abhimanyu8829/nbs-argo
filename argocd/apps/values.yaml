@@ -1,7 +1,7 @@
 global:
   argocdNamespace: argocd
   destinationServer: https://kubernetes.default.svc
-  repoURL: https://github.com/dushyantajangid/NitroBerry-Platform.git
+  repoURL: https://github.com/abhimanyu8829/nbs-argo.git
   ecrRepoUrl: oci://798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
 
   appHelmValues:
