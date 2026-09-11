@@ -271,7 +271,7 @@ if kubectl get namespace argocd >/dev/null 2>&1; then
 else
     echo "Installing ArgoCD..."
     kubectl create namespace argocd
-    kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
+    kubectl apply --server-side --force-conflicts -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
     echo "=> Waiting for ArgoCD server to be ready..."
     kubectl wait --for=condition=available deployment/argocd-server -n argocd --timeout=300s
