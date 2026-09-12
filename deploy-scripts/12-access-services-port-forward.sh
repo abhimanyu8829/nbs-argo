@@ -24,10 +24,10 @@ start_forward() {
   echo "  ${name}: svc/${svc} -n ${ns} -> ${ports}  (pid $!, log: ${LOG_DIR}/${name}.log)"
 }
 
-start_forward "traefik"  "traefik-service" "traefik-ingress"   "8081:80"
-start_forward "postgres" "postgres"        "database-namespace" "5432:5432"
-start_forward "redis"    "redis"           "database-namespace" "6379:6379"
-start_forward "pgbouncer" "pgbouncer"      "database-namespace" "6432:6432"
+start_forward "traefik"   "traefik-service"   "traefik-ingress"    "8081:80"
+start_forward "postgres"  "postgres-service"  "database-namespace" "5432:5432"
+start_forward "redis"     "redis-service"     "database-namespace" "6379:6379"
+start_forward "pgbouncer" "pgbouncer-service" "database-namespace" "6432:6432"
 
 sleep 2
 

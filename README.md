@@ -151,8 +151,8 @@ Other things worth knowing:
 
 | File | Purpose |
 |---|---|
-| `installation/setup-vm.sh` | Main bootstrap: installs Helm/containerd/kubeadm, inits the cluster, installs Calico, ArgoCD, MetalLB, creates the initial ECR secret, applies `root-app.yaml`. |
-| `installation/ecr-helper.yaml` | A CronJob (applied by `setup-vm.sh`) that runs every 6 hours: refreshes the ECR login token, rebuilds ArgoCD's OCI-repo credentials (currently dormant — see note below), creates all 13 namespaces if missing, and refreshes `ecr-regcred`/`ecr-registry-secret` pull secrets in each. |
+| `installation/setup-vm.sh` | Main bootstrap: installs Helm/containerd/kubeadm, inits the cluster, installs Flannel, ArgoCD, MetalLB, creates the initial ECR secret, applies `root-app.yaml`. |
+| `installation/ecr-helper.yaml` | A CronJob (applied by `setup-vm.sh`) that runs every 6 hours: refreshes the ECR login token, rebuilds ArgoCD's OCI-repo credentials (currently dormant — see note below), creates all 13 namespaces if missing, and refreshes `ecr-regcred`/`ecr-registry-secret` pull secrets in each. Uses `heyvaldemar/aws-kubectl` (multi-arch, works on ARM) — the original `odaniait/aws-kubectl` image is amd64-only and crashes with `exec format error` on aarch64. |
 | `deploy-production.sh` | Post-bootstrap verification: installs the storage class, distributes ECR secrets, forces an ArgoCD sync, waits for pod readiness, reports final sync status. |
 | `port-forward.sh` | Manual convenience script for local access to Traefik/Postgres/Redis/PgBouncer/ArgoCD UI. Uses the correct `-service`-suffixed names. |
 
@@ -174,7 +174,7 @@ OCI. It's harmless, just latent scaffolding from before the refactor.
 | `05-clone-repository.sh` | Clones (or pulls latest into) `REPO_DIR`, checks out `argocdTest`. |
 | `06-set-environment-variables.sh` | Validates `00-config.env` before the long bootstrap runs. |
 | `07-run-setup-vm-script.sh` | Runs the repo's real `script/installation/setup-vm.sh`. 15–25 min. |
-| `08-verify-cluster-and-argocd.sh` | Checks node/ArgoCD/MetalLB/Calico health, confirms the ECR account ID substitution. |
+| `08-verify-cluster-and-argocd.sh` | Checks node/ArgoCD/MetalLB/Flannel health, confirms the ECR account ID substitution. |
 | `09-run-deploy-production-script.sh` | Runs the repo's real `script/deploy-production.sh`. |
 | `10-verify-argocd-application-sync.sh` | Checks every Application against what's actually expected (infra should sync, app-tier will error). |
 | `11-access-argocd-ui.sh` | Prints the admin password and the SSH-tunnel commands for safe UI access. |

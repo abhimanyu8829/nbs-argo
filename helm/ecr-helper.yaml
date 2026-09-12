@@ -12,6 +12,15 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "create", "patch", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "create", "list"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -41,29 +50,76 @@ spec:
         spec:
           serviceAccountName: ecr-helper
           restartPolicy: Never
+          securityContext:
+            runAsUser: 0
           containers:
             - name: ecr-token-refresher
-              image: odaniait/aws-kubectl:latest
+              image: heyvaldemar/aws-kubectl:latest
               imagePullPolicy: IfNotPresent
               env:
                 - name: AWS_DEFAULT_REGION
                   value: "ap-south-1"
+                - name: AWS_SHARED_CREDENTIALS_FILE
+                  value: "/root/.aws/credentials"
+                - name: AWS_CONFIG_FILE
+                  value: "/root/.aws/config"
               command:
                 - /bin/sh
                 - -c
                 - |
                   AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
                   ECR_TOKEN=$(aws ecr get-login-password --region ${AWS_DEFAULT_REGION})
-                  for ns in argocd database-namespace default auth-namespace cockpit-namespace messenger-namespace social-namespace task-namespace vault-namespace workflow-namespace; do
-                    # Check if namespace exists, if not, create it
+
+                  kubectl label configmap argocd-cm -n argocd \
+                    app.kubernetes.io/name=argocd-cm \
+                    app.kubernetes.io/part-of=argocd \
+                    --overwrite
+
+                  kubectl delete secret ecr-oci-secret -n argocd --ignore-not-found
+                  kubectl create secret generic ecr-oci-secret \
+                    --from-literal=username=AWS \
+                    --from-literal=password=${ECR_TOKEN} \
+                    -n argocd
+
+                  kubectl delete secret ecr-credentials -n argocd --ignore-not-found
+                  kubectl create secret docker-registry ecr-credentials \
+                    --docker-server=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com \
+                    --docker-username=AWS \
+                    --docker-password=${ECR_TOKEN} \
+                    -n argocd
+
+                  kubectl delete secret nitroberry-ecr-repo -n argocd --ignore-not-found
+                  kubectl create secret generic nitroberry-ecr-repo \
+                    --from-literal=name=nitroberry-ecr \
+                    --from-literal=url=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/nitroberry \
+                    --from-literal=type=helm \
+                    --from-literal=enableOCI=true \
+                    --from-literal=username=AWS \
+                    --from-literal=password=${ECR_TOKEN} \
+                    -n argocd
+                  kubectl label secret nitroberry-ecr-repo -n argocd \
+                    argocd.argoproj.io/secret-type=repository \
+                    --overwrite
+
+                  kubectl patch configmap argocd-cm -n argocd --type merge -p "{\"data\":{\"repositories\":\"- url: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/nitroberry\n  type: helm\n  name: nitroberry-ecr\n  enableOCI: true\n  insecure: false\n\",\"repository.credentials\":\"- url: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com\n  type: helm\n  usernameSecret:\n    name: ecr-oci-secret\n    key: username\n  passwordSecret:\n    name: ecr-oci-secret\n    key: password\n  enableOCI: true\n\"}}"
+
+                  for ns in argocd database-namespace default gatekeeper-system metallb-system traefik-ingress auth-namespace cockpit-namespace messenger-namespace social-namespace task-namespace vault-namespace workflow-namespace; do
                     kubectl get namespace $ns >/dev/null 2>&1 || kubectl create namespace $ns
                     kubectl delete secret ecr-regcred -n $ns --ignore-not-found
-                    kubectl create secret generic ecr-regcred \
+                    kubectl create secret docker-registry ecr-regcred \
+                      --docker-server=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com \
+                      --docker-username=AWS \
+                      --docker-password=${ECR_TOKEN} \
+                      -n $ns
+                    kubectl delete secret ecr-registry-secret -n $ns --ignore-not-found
+                    kubectl create secret docker-registry ecr-registry-secret \
                       --docker-server=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com \
                       --docker-username=AWS \
                       --docker-password=${ECR_TOKEN} \
                       -n $ns
                   done
+
+                  kubectl delete pod -n argocd -l app.kubernetes.io/name=argocd-repo-server --ignore-not-found
               volumeMounts:
                 - name: aws-creds
                   mountPath: /root/.aws

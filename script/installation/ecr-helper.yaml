@@ -12,6 +12,15 @@ rules:
   - apiGroups: [""]
     resources: ["secrets"]
     verbs: ["get", "create", "patch", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "create", "list"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    verbs: ["get", "patch", "update"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "delete", "watch"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRoleBinding
@@ -41,13 +50,19 @@ spec:
         spec:
           serviceAccountName: ecr-helper
           restartPolicy: Never
+          securityContext:
+            runAsUser: 0
           containers:
             - name: ecr-token-refresher
-              image: odaniait/aws-kubectl:latest
+              image: heyvaldemar/aws-kubectl:latest
               imagePullPolicy: IfNotPresent
               env:
                 - name: AWS_DEFAULT_REGION
                   value: "ap-south-1"
+                - name: AWS_SHARED_CREDENTIALS_FILE
+                  value: "/root/.aws/credentials"
+                - name: AWS_CONFIG_FILE
+                  value: "/root/.aws/config"
               command:
                 - /bin/sh
                 - -c

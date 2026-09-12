@@ -162,10 +162,9 @@ ensure_kubernetes_cluster() {
   grep -qxF 'export KUBECONFIG=$HOME/.kube/config' "$HOME/.bashrc" \
     || echo 'export KUBECONFIG=$HOME/.kube/config' >> "$HOME/.bashrc"
 
-  if ! kubectl get namespace tigera-operator >/dev/null 2>&1; then
-    log "Installing Calico CNI"
-    kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/tigera-operator.yaml
-    kubectl create -f https://raw.githubusercontent.com/projectcalico/calico/v3.27.0/manifests/custom-resources.yaml
+  if ! kubectl get namespace kube-flannel >/dev/null 2>&1; then
+    log "Installing Flannel CNI"
+    curl -s https://raw.githubusercontent.com/flannel-io/flannel/master/Documentation/kube-flannel.yml | sed "s#10.244.0.0/16#192.168.0.0/16#" | kubectl apply -f -
   fi
 
   # Untaint the control-plane node so workloads can run on this single-node cluster
