@@ -170,6 +170,23 @@ ensure_kubernetes_cluster() {
   # Untaint the control-plane node so workloads can run on this single-node cluster
   echo "=> Untainting master node to allow pod scheduling..."
   kubectl taint nodes --all node-role.kubernetes.io/control-plane- || true
+
+  # Known race condition: kube-proxy and the CNI can both finish programming
+  # iptables rules while the control plane is still starting up, leaving
+  # stale/incomplete ClusterIP routing in place (symptom: pods/CoreDNS get
+  # "no route to host" reaching 10.96.0.1). A clean flush + restart of both
+  # components reliably clears this - confirmed twice in testing, regardless
+  # of which CNI is installed.
+  log "Resetting iptables and restarting kube-proxy/CNI to clear any stale networking state"
+  sleep 15
+  sudo iptables -F
+  sudo iptables -t nat -F
+  sudo iptables -t mangle -F
+  sudo iptables -X
+  kubectl delete pod -n kube-system -l k8s-app=kube-proxy --ignore-not-found
+  kubectl delete pod -n kube-flannel -l app=flannel --ignore-not-found
+  kubectl wait --for=condition=Ready pod -l k8s-app=kube-proxy -n kube-system --timeout=60s || true
+  kubectl wait --for=condition=Ready pod -l app=flannel -n kube-flannel --timeout=60s || true
 }
 
 wait_for_namespace() {

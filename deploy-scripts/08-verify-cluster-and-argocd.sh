@@ -20,16 +20,19 @@ echo "--- MetalLB pods ---"
 kubectl get pods -n metallb-system
 
 echo
-echo "--- Calico pods ---"
-kubectl get pods -n kube-system | grep -i calico || echo "No calico pods found - check this."
+echo "--- Flannel pods ---"
+kubectl get pods -n kube-flannel || echo "No flannel pods found - check this."
 
 echo
 echo "--- ECR account substitution check ---"
 if [ -f "${REPO_DIR}/argocd/root-app.yaml" ]; then
   grep -A1 "ecrRepoUrl" "${REPO_DIR}/argocd/root-app.yaml" || true
   if grep -q "798701233691" "${REPO_DIR}/argocd/root-app.yaml"; then
-    echo "WARNING: root-app.yaml still shows the placeholder account 798701233691."
-    echo "The auto-substitution in setup-vm.sh may not have run correctly."
+    echo "NOTE: root-app.yaml shows account 798701233691."
+    echo "This is expected if 798701233691 IS your actual AWS account - the"
+    echo "substitution replaces the placeholder with your detected account,"
+    echo "and if they're numerically the same, the file looks unchanged."
+    echo "Confirm your real account with: aws sts get-caller-identity"
   else
     echo "OK: placeholder account ID has been replaced."
   fi
@@ -42,7 +45,7 @@ echo "Checklist:"
 echo "  [ ] Node shows Ready"
 echo "  [ ] ArgoCD pods all Running"
 echo "  [ ] MetalLB pods Running"
-echo "  [ ] Calico pods Running"
-echo "  [ ] root-app.yaml shows your account, not the placeholder"
+echo "  [ ] Flannel pods Running"
+echo "  [ ] root-app.yaml shows your account (see note above if it matches the placeholder numerically)"
 echo
 echo "Next: bash 09-run-deploy-production-script.sh"

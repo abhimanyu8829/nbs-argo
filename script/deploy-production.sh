@@ -104,8 +104,10 @@ if [[ "${INSTALL_LOCAL_PATH_STORAGE}" == "true" ]]; then
     log "Installing local-path-provisioner (arch: ${ARCH} — multi-arch image, same manifest)..."
     kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
     kubectl wait --for=condition=available deployment/local-path-provisioner -n local-path-storage --timeout=120s
+    kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}'
     log "✓ Local-path StorageClass installed"
   else
+    kubectl patch storageclass local-path -p '{"metadata": {"annotations":{"storageclass.kubernetes.io/is-default-class":"true"}}}' 2>/dev/null || true
     log "✓ StorageClass 'local-path' already exists"
   fi
 fi
