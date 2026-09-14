@@ -2,13 +2,21 @@ global:
   argocdNamespace: argocd
   destinationServer: https://kubernetes.default.svc
   repoURL: https://github.com/abhimanyu8829/nbs-argo.git
-  ecrRepoUrl: oci://798701233691.dkr.ecr.ap-south-1.amazonaws.com/nitroberry
+
+  # Bare ECR registry hostname - NO oci:// prefix, NO trailing path.
+  # This is the exact format ArgoCD's OCI credential matching requires;
+  # using oci://...  or appending /nitroberry here was the root cause of
+  # every "basic credential not found" / path-resolution error hit while
+  # debugging this. The "nitroberry/" namespace goes in each app's
+  # `chart` field instead (see templates/applications.yaml).
+  ecrRegistryRoot: 798701233691.dkr.ecr.ap-south-1.amazonaws.com
 
   appHelmValues:
     imagePullSecrets:
       - name: ecr-registry-secret
 
 chartTags:
+  # --- infra tier (git-sourced, chart tag unused but kept for consistency) ---
   metallb: "1.0.0"
   postgres: "1.0.0"
   pgbouncer: "1.0.0"
@@ -18,8 +26,25 @@ chartTags:
   external-secrets: "1.0.0"
   external-secrets-config: "1.0.0"
   reloader: "1.0.0"
+  # --- app tier (OCI-sourced from ECR, real current versions) ---
+  auth-api: "0.0.45"
+  auth-worker: "0.0.45"
+  cockpit-api: "0.0.149"
+  cockpit-worker: "0.0.149"
+  messenger-api: "0.0.8"
+  social-api: "0.0.40"
+  social-worker: "0.0.40"
+  task-api: "0.0.35"
+  task-worker: "0.0.35"
+  vault-api: "0.0.39"
+  vault-worker: "0.0.39"
+  workflow-api: "0.0.85"
+  workflow-worker: "0.0.85"
 
 applications:
+  # ============================================================
+  # INFRA TIER - sourced from this Git repo's helm/<name> folders
+  # ============================================================
   metallb:
     chart: metallb-helm
     namespace: metallb-system
@@ -90,3 +115,114 @@ applications:
       - CreateNamespace=true
       - ApplyOutOfSyncOnly=true
       - SkipDryRunOnMissingResource=true
+
+  # ============================================================
+  # APP TIER - sourced from ECR as OCI Helm charts (confirmed
+  # working: real images pull, real pods start). Each currently
+  # shows Degraded until azure-secret-sp is created and
+  # ClusterSecretStore/azure-backend goes Valid - see README.
+  # ============================================================
+  auth-api:
+    chart: auth-api-helm
+    sourceType: oci
+    namespace: auth-namespace
+    syncWave: "10"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+  auth-worker:
+    chart: auth-worker-helm
+    sourceType: oci
+    namespace: auth-namespace
+    syncWave: "20"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+  cockpit-api:
+    chart: cockpit-api-helm
+    sourceType: oci
+    namespace: cockpit-namespace
+    syncWave: "12"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+  cockpit-worker:
+    chart: cockpit-worker-helm
+    sourceType: oci
+    namespace: cockpit-namespace
+    syncWave: "22"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+  messenger-api:
+    chart: messenger-api-helm
+    sourceType: oci
+    namespace: messenger-namespace
+    syncWave: "10"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+  social-api:
+    chart: social-api-helm
+    sourceType: oci
+    namespace: social-namespace
+    syncWave: "13"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+  social-worker:
+    chart: social-worker-helm
+    sourceType: oci
+    namespace: social-namespace
+    syncWave: "23"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+  task-api:
+    chart: task-api-helm
+    sourceType: oci
+    namespace: task-namespace
+    syncWave: "14"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+  task-worker:
+    chart: task-worker-helm
+    sourceType: oci
+    namespace: task-namespace
+    syncWave: "24"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+  vault-api:
+    chart: vault-api-helm
+    sourceType: oci
+    namespace: vault-namespace
+    syncWave: "11"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+  vault-worker:
+    chart: vault-worker-helm
+    sourceType: oci
+    namespace: vault-namespace
+    syncWave: "21"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+  workflow-api:
+    chart: workflow-api-helm
+    sourceType: oci
+    namespace: workflow-namespace
+    syncWave: "16"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true
+  workflow-worker:
+    chart: workflow-worker-helm
+    sourceType: oci
+    namespace: workflow-namespace
+    syncWave: "26"
+    syncOptions:
+      - CreateNamespace=true
+      - ApplyOutOfSyncOnly=true

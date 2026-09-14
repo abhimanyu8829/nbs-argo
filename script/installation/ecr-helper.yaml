@@ -88,10 +88,18 @@ spec:
                     --docker-password=${ECR_TOKEN} \
                     -n argocd
 
+                  # IMPORTANT: this URL must be the BARE registry hostname -
+                  # no oci:// prefix, no trailing /nitroberry path. ArgoCD's
+                  # OCI credential matching only works against this exact
+                  # format; the chart namespace ("nitroberry/") belongs on
+                  # each Application's `chart` field, not here. Getting this
+                  # wrong causes "basic credential not found" errors that
+                  # look like an auth problem but are actually a URL-format
+                  # mismatch.
                   kubectl delete secret nitroberry-ecr-repo -n argocd --ignore-not-found
                   kubectl create secret generic nitroberry-ecr-repo \
                     --from-literal=name=nitroberry-ecr \
-                    --from-literal=url=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/nitroberry \
+                    --from-literal=url=${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com \
                     --from-literal=type=helm \
                     --from-literal=enableOCI=true \
                     --from-literal=username=AWS \
@@ -100,8 +108,6 @@ spec:
                   kubectl label secret nitroberry-ecr-repo -n argocd \
                     argocd.argoproj.io/secret-type=repository \
                     --overwrite
-
-                  kubectl patch configmap argocd-cm -n argocd --type merge -p "{\"data\":{\"repositories\":\"- url: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/nitroberry\n  type: helm\n  name: nitroberry-ecr\n  enableOCI: true\n  insecure: false\n\",\"repository.credentials\":\"- url: ${AWS_ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com\n  type: helm\n  usernameSecret:\n    name: ecr-oci-secret\n    key: username\n  passwordSecret:\n    name: ecr-oci-secret\n    key: password\n  enableOCI: true\n\"}}"
 
                   for ns in argocd database-namespace default gatekeeper-system metallb-system traefik-ingress auth-namespace cockpit-namespace messenger-namespace social-namespace task-namespace vault-namespace workflow-namespace; do
                     kubectl get namespace $ns >/dev/null 2>&1 || kubectl create namespace $ns

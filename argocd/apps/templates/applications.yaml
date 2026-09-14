@@ -18,9 +18,19 @@ spec:
   project: default
 
   source:
+    {{- if eq $app.sourceType "oci" }}
+    # OCI Helm chart pulled directly from ECR. repoURL must be the bare
+    # registry hostname (NO oci:// prefix, NO trailing path) - ArgoCD's
+    # OCI credential lookup only matches this exact format. The full
+    # chart path (including the "nitroberry/" namespace) goes in `chart`.
+    repoURL: {{ $.Values.global.ecrRegistryRoot | quote }}
+    chart: {{ printf "nitroberry/%s" $app.chart | quote }}
+    targetRevision: {{ index $.Values.chartTags $name | quote }}
+    {{- else }}
     repoURL: {{ $.Values.global.repoURL | quote }}
     targetRevision: argocdTest
     path: helm/{{ $app.chart | replace "-helm" "" }}
+    {{- end }}
 
     {{- if $helmValues }}
     helm:
